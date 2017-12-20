@@ -207,8 +207,16 @@ if(CMAKE_THREAD_LIBS_INIT)
 endif()
 
 if(UNIX)
-	target_link_libraries(llvm INTERFACE debug     ${ZLIB_LIBRARIES} rt dl tinfo)
-	target_link_libraries(llvm INTERFACE optimized ${ZLIB_LIBRARIES} rt dl tinfo)
+	target_link_libraries(llvm INTERFACE debug     ${ZLIB_LIBRARIES} dl)
+	target_link_libraries(llvm INTERFACE optimized ${ZLIB_LIBRARIES} dl)
+
+	if (NOT APPLE)
+		target_link_libraries(llvm INTERFACE debug     rt tinfo)
+		target_link_libraries(llvm INTERFACE optimized rt tinfo)
+	else()
+		target_link_libraries(llvm INTERFACE debug     curses)
+		target_link_libraries(llvm INTERFACE optimized curses)
+	endif()
 endif()
 
 # Set include directories.
