@@ -39,66 +39,48 @@ if(NOT PYTHON_EXECUTABLE)
 	find_program(PYTHON_EXECUTABLE "python")
 endif()
 
-# The LLVM project properties differ between MSVC and Linux builds.
-if(MSVC)
-	# See the comments below for Linux rules for an explanation of the passed
-	# options.
-	ExternalProject_Add(llvm-project
-		SOURCE_DIR "${PROJECT_SOURCE_DIR}/src"
-		CMAKE_ARGS
-			-DCMAKE_BUILD_TYPE=Release
-			-DPYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
-			-DLLVM_TARGETS_TO_BUILD=X86
-			-DLLVM_INCLUDE_TESTS=NO
-			-DLLVM_REQUIRES_RTTI=YES
-			-DLLVM_ENABLE_ASSERTIONS=${IS_DEBUG_BUILD}
-			-DLLVM_ENABLE_WARNINGS=NO
-			-DLLVM_ENABLE_TERMINFO=YES
-		INSTALL_COMMAND ""
-	)
-else() # Linux
-	ExternalProject_Add(llvm-project
-		SOURCE_DIR "${PROJECT_SOURCE_DIR}/src"
-		CMAKE_ARGS
-			# Force a release build (we don't need to debug LLVM).
-			-DCMAKE_BUILD_TYPE=Release
+ExternalProject_Add(llvm-project
+	SOURCE_DIR "${PROJECT_SOURCE_DIR}/src"
+	CMAKE_ARGS
+		# Force a release build (we don't need to debug LLVM).
+		# This has no effect on Windows with MSVC, but is useful on Linux.
+		-DCMAKE_BUILD_TYPE=Release
 
-			# Force Python3 (see the comment above when setting
-			# PYTHON_EXECUTABLE).
-			-DPYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
+		# Force Python3 (see the comment above when setting
+		# PYTHON_EXECUTABLE).
+		-DPYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}
 
-			# Targets to be build.
-			-DLLVM_TARGETS_TO_BUILD=X86
+		# Targets to be build.
+		-DLLVM_TARGETS_TO_BUILD=X86
 
-			# Disable the generation of targets for tests (we don't need them).
-			-DLLVM_INCLUDE_TESTS=NO
+		# Disable the generation of targets for tests (we don't need them).
+		-DLLVM_INCLUDE_TESTS=NO
 
-			# Our tools depending on LLVM require RTTI, so build LLVM with it.
-			-DLLVM_REQUIRES_RTTI=YES
+		# Our tools depending on LLVM require RTTI, so build LLVM with it.
+		-DLLVM_REQUIRES_RTTI=YES
 
-			# When building in the debug mode (=> assertions are enabled), we
-			# have to build LLVM with assertions. This prevents link errors
-			# when building the middle-end and back-end (see
-			# https://github.com/oclint/oclint/issues/129).
-			-DLLVM_ENABLE_ASSERTIONS=${IS_DEBUG_BUILD}
+		# When building in the debug mode (=> assertions are enabled), we
+		# have to build LLVM with assertions. This prevents link errors
+		# when building the middle-end and back-end (see
+		# https://github.com/oclint/oclint/issues/129).
+		-DLLVM_ENABLE_ASSERTIONS=${IS_DEBUG_BUILD}
 
-			# Disable the emission of warnings, which are useless since we do
-			# not modify the LLVM sources (of course, except for a few
-			# exceptions).
-			-DLLVM_ENABLE_WARNINGS=NO
+		# Disable the emission of warnings, which are useless since we do
+		# not modify the LLVM sources (of course, except for a few
+		# exceptions).
+		-DLLVM_ENABLE_WARNINGS=NO
 
-			# Enable the use of terminfo because in the back-end, we use the
-			# coloring system from LLVM so we do not have to deal with issues
-			# due to multi-platform support of coloring by ourselves.
-			# Note to developers: On Linux, programs that link LLVM libraries
-			#                     need to also link the tinfo library.
-			-DLLVM_ENABLE_TERMINFO=YES
+		# Enable the use of terminfo because in the back-end, we use the
+		# coloring system from LLVM so we do not have to deal with issues
+		# due to multi-platform support of coloring by ourselves.
+		# Note to developers: On Linux, programs that link LLVM libraries
+		#                     need to also link the tinfo library.
+		-DLLVM_ENABLE_TERMINFO=YES
 
-		# Disable the installation right after build (we want to install the
-		# needed libraries and tools manually).
-		INSTALL_COMMAND ""
-	)
-endif()
+	# Disable the installation right after build (we want to install the
+	# needed libraries and tools manually).
+	INSTALL_COMMAND ""
+)
 
 # Forces a configure step for the given external project.
 # The configure step for external projects is needed to (1) detect source-file
