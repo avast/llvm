@@ -114,8 +114,8 @@ else() # Linux
 			COMMAND "$(MAKE)" llvm-as
 			COMMAND "$(MAKE)" llvm-dis
 
-		# Disable the installation right after build (we want to install the needed
-		# tools manually when calling `make.sh install`).
+		# Disable the installation right after build (we want to install the
+		# needed libraries and tools manually).
 		INSTALL_COMMAND ""
 	)
 endif()
