@@ -137,9 +137,7 @@ endmacro()
 # We need to force the configuration step for LLVM. Otherwise, if we changed
 # LLVM sources, they would not be rebuilt. This also fixes infinite recursion
 # when running make after an interrupted LLVM build.
-if(NOT SKIP_DEPENDENCIES)
-	force_configure_step(llvm-project)
-endif()
+force_configure_step(llvm-project)
 
 # Add libraries.
 ExternalProject_Get_Property(llvm-project binary_dir)
