@@ -94,26 +94,6 @@ else() # Linux
 			#                     need to also link the tinfo library.
 			-DLLVM_ENABLE_TERMINFO=YES
 
-			# Disable the automatic build of tools and build them manually. In
-			# this way, we can only select the tools we are actually going to
-			# use instead of building them all.
-			#
-			# This does not work on MSVC when using a project/solution.
-			-DLLVM_BUILD_TOOLS=NO
-
-		# Build LLVM libraries and only the needed tools.
-		# Use the literal "$(MAKE)" instead of just "make" so that "$(MAKE)"
-		# appears in the generated Makefiles. That tells the top level make to
-		# spawn sub-makes with the job controller from the top level make.
-		# Then, we don't need to specify any -j flags anywhere except at the
-		# top level (see
-		# http://www.cmake.org/pipermail/cmake/2010-October/040109.html)
-		#
-		# This does not work on MSVC when using a project/solution.
-		BUILD_COMMAND "$(MAKE)"
-			COMMAND "$(MAKE)" llvm-as
-			COMMAND "$(MAKE)" llvm-dis
-
 		# Disable the installation right after build (we want to install the
 		# needed libraries and tools manually).
 		INSTALL_COMMAND ""
