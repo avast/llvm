@@ -23,8 +23,8 @@ subdirectories =
  CodeGen
 ; DebugInfo
 ; ExecutionEngine
- LibDriver
- LineEditor
+; LibDriver
+; LineEditor
  Linker
  IR
  IRReader
@@ -32,7 +32,7 @@ subdirectories =
  MC
  Object
 ; ObjectYAML
- Option
+; Option
  Passes
  ProfileData
  Support
