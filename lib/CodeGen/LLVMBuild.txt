@@ -16,7 +16,11 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = AsmPrinter SelectionDAG MIRParser GlobalISel
+subdirectories = 
+; AsmPrinter
+; SelectionDAG
+; MIRParser
+; GlobalISel
 
 [component_0]
 type = Library
