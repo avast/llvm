@@ -21,7 +21,7 @@ subdirectories =
  AsmParser
  Bitcode
  CodeGen
- DebugInfo
+; DebugInfo
  ExecutionEngine
  LibDriver
  LineEditor
