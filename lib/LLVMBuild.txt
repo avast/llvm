@@ -22,7 +22,7 @@ subdirectories =
  Bitcode
  CodeGen
 ; DebugInfo
- ExecutionEngine
+; ExecutionEngine
  LibDriver
  LineEditor
  Linker
