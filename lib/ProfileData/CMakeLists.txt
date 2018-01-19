@@ -14,4 +14,4 @@ add_llvm_library(LLVMProfileData
   intrinsics_gen
   )
 
-add_subdirectory(Coverage)
+#add_subdirectory(Coverage)
