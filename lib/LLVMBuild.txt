@@ -28,7 +28,7 @@ subdirectories =
  Linker
  IR
  IRReader
- LTO
+; LTO
  MC
  Object
  ObjectYAML
