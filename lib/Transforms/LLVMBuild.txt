@@ -19,7 +19,7 @@
 subdirectories =
  IPO
  InstCombine
- Instrumentation
+; Instrumentation
  Scalar
  Utils
 ; Vectorize

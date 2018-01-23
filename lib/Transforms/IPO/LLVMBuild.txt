@@ -20,7 +20,8 @@ type = Library
 name = IPO
 parent = Transforms
 library_name = ipo
-required_libraries = Analysis Core InstCombine IRReader Object Scalar Support TransformUtils Instrumentation
+required_libraries = Analysis Core InstCombine IRReader Object Scalar Support TransformUtils
 ; ProfileData
 ; Linker
 ; Vectorize
+; Instrumentation
