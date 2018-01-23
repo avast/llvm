@@ -22,7 +22,7 @@ subdirectories =
  Instrumentation
  Scalar
  Utils
- Vectorize
+; Vectorize
 ; ObjCARC
 
 [component_0]
