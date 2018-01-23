@@ -39,7 +39,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/YAMLTraits.h"
+//#include "llvm/Support/YAMLTraits.h"
 #include <memory>
 
 using namespace llvm;
