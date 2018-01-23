@@ -25,7 +25,7 @@ subdirectories =
 ; ExecutionEngine
 ; LibDriver
 ; LineEditor
- Linker
+; Linker
  IR
  IRReader
 ; LTO
