@@ -16,7 +16,7 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = 
+subdirectories =
 ; AsmPrinter
 ; SelectionDAG
 ; MIRParser
@@ -26,4 +26,5 @@ subdirectories =
 type = Library
 name = CodeGen
 parent = Libraries
-required_libraries = Analysis BitReader BitWriter Core Instrumentation MC ProfileData Scalar Support Target TransformUtils
+required_libraries = Analysis BitReader BitWriter Core Instrumentation MC Scalar Support Target TransformUtils
+; ProfileData

@@ -34,7 +34,7 @@ subdirectories =
 ; ObjectYAML
 ; Option
  Passes
- ProfileData
+; ProfileData
  Support
  TableGen
  Target
