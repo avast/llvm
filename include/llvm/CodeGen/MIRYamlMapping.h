@@ -17,7 +17,7 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
-#include "llvm/Support/YAMLTraits.h"
+//#include "llvm/Support/YAMLTraits.h"
 #include <vector>
 
 namespace llvm {

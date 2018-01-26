@@ -40,7 +40,6 @@ add_llvm_library(LLVMTransformUtils
   SimplifyInstructions.cpp
   SimplifyLibCalls.cpp
   SplitModule.cpp
-  SymbolRewriter.cpp
   UnifyFunctionExitNodes.cpp
   Utils.cpp
   ValueMapper.cpp

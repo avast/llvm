@@ -21,20 +21,20 @@ subdirectories =
  AsmParser
  Bitcode
  CodeGen
- DebugInfo
- ExecutionEngine
- LibDriver
- LineEditor
- Linker
+; DebugInfo
+; ExecutionEngine
+; LibDriver
+; LineEditor
+; Linker
  IR
  IRReader
- LTO
+; LTO
  MC
  Object
- ObjectYAML
- Option
+; ObjectYAML
+; Option
  Passes
- ProfileData
+; ProfileData
  Support
  TableGen
  Target

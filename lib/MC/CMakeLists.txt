@@ -53,4 +53,4 @@ add_llvm_library(LLVMMC
   )
 
 add_subdirectory(MCParser)
-add_subdirectory(MCDisassembler)
+#add_subdirectory(MCDisassembler)

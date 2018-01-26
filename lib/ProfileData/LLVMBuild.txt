@@ -16,7 +16,8 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = Coverage
+subdirectories =
+; Coverage
 
 [component_0]
 type = Library

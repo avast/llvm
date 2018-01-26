@@ -568,119 +568,123 @@ bool FunctionImporter::importFunctions(
                << DestModule.getModuleIdentifier() << "\n");
   unsigned ImportedCount = 0;
 
-  // Linker that will be used for importing function
-  Linker TheLinker(DestModule);
-  // Do the actual import of functions now, one Module at a time
-  std::set<StringRef> ModuleNameOrderedList;
-  for (auto &FunctionsToImportPerModule : ImportList) {
-    ModuleNameOrderedList.insert(FunctionsToImportPerModule.first());
-  }
-  for (auto &Name : ModuleNameOrderedList) {
-    // Get the module for the import
-    const auto &FunctionsToImportPerModule = ImportList.find(Name);
-    assert(FunctionsToImportPerModule != ImportList.end());
-    std::unique_ptr<Module> SrcModule = ModuleLoader(Name);
-    assert(&DestModule.getContext() == &SrcModule->getContext() &&
-           "Context mismatch");
-
-    // If modules were created with lazy metadata loading, materialize it
-    // now, before linking it (otherwise this will be a noop).
-    SrcModule->materializeMetadata();
-    UpgradeDebugInfo(*SrcModule);
-
-    auto &ImportGUIDs = FunctionsToImportPerModule->second;
-    // Find the globals to import
-    DenseSet<const GlobalValue *> GlobalsToImport;
-    for (Function &F : *SrcModule) {
-      if (!F.hasName())
-        continue;
-      auto GUID = F.getGUID();
-      auto Import = ImportGUIDs.count(GUID);
-      DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing function " << GUID
-                   << " " << F.getName() << " from "
-                   << SrcModule->getSourceFileName() << "\n");
-      if (Import) {
-        F.materialize();
-        if (EnableImportMetadata) {
-          // Add 'thinlto_src_module' metadata for statistics and debugging.
-          F.setMetadata(
-              "thinlto_src_module",
-              llvm::MDNode::get(
-                  DestModule.getContext(),
-                  {llvm::MDString::get(DestModule.getContext(),
-                                       SrcModule->getSourceFileName())}));
-        }
-        GlobalsToImport.insert(&F);
-      }
-    }
-    for (GlobalVariable &GV : SrcModule->globals()) {
-      if (!GV.hasName())
-        continue;
-      auto GUID = GV.getGUID();
-      auto Import = ImportGUIDs.count(GUID);
-      DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing global " << GUID
-                   << " " << GV.getName() << " from "
-                   << SrcModule->getSourceFileName() << "\n");
-      if (Import) {
-        GV.materialize();
-        GlobalsToImport.insert(&GV);
-      }
-    }
-    for (GlobalAlias &GA : SrcModule->aliases()) {
-      if (!GA.hasName())
-        continue;
-      auto GUID = GA.getGUID();
-      auto Import = ImportGUIDs.count(GUID);
-      DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing alias " << GUID
-                   << " " << GA.getName() << " from "
-                   << SrcModule->getSourceFileName() << "\n");
-      if (Import) {
-        // Alias can't point to "available_externally". However when we import
-        // linkOnceODR the linkage does not change. So we import the alias
-        // and aliasee only in this case. This has been handled by
-        // computeImportForFunction()
-        GlobalObject *GO = GA.getBaseObject();
-        assert(GO->hasLinkOnceODRLinkage() &&
-               "Unexpected alias to a non-linkonceODR in import list");
-#ifndef NDEBUG
-        if (!GlobalsToImport.count(GO))
-          DEBUG(dbgs() << " alias triggers importing aliasee " << GO->getGUID()
-                       << " " << GO->getName() << " from "
-                       << SrcModule->getSourceFileName() << "\n");
-#endif
-        GO->materialize();
-        GlobalsToImport.insert(GO);
-        GA.materialize();
-        GlobalsToImport.insert(&GA);
-      }
-    }
-
-    // Link in the specified functions.
-    if (renameModuleForThinLTO(*SrcModule, Index, &GlobalsToImport))
-      return true;
-
-    if (PrintImports) {
-      for (const auto *GV : GlobalsToImport)
-        dbgs() << DestModule.getSourceFileName() << ": Import " << GV->getName()
-               << " from " << SrcModule->getSourceFileName() << "\n";
-    }
-
-    // Instruct the linker that the client will take care of linkonce resolution
-    unsigned Flags = Linker::Flags::None;
-    if (!ForceImportReferencedDiscardableSymbols)
-      Flags |= Linker::Flags::DontForceLinkLinkonceODR;
-
-    if (TheLinker.linkInModule(std::move(SrcModule), Flags, &GlobalsToImport))
-      report_fatal_error("Function Import: link error");
-
-    ImportedCount += GlobalsToImport.size();
-  }
-
-  NumImported += ImportedCount;
-
-  DEBUG(dbgs() << "Imported " << ImportedCount << " functions for Module "
-               << DestModule.getModuleIdentifier() << "\n");
+// retdec - new code
   return ImportedCount;
+
+// retdec - old code
+//  // Linker that will be used for importing function
+//  Linker TheLinker(DestModule);
+//  // Do the actual import of functions now, one Module at a time
+//  std::set<StringRef> ModuleNameOrderedList;
+//  for (auto &FunctionsToImportPerModule : ImportList) {
+//    ModuleNameOrderedList.insert(FunctionsToImportPerModule.first());
+//  }
+//  for (auto &Name : ModuleNameOrderedList) {
+//    // Get the module for the import
+//    const auto &FunctionsToImportPerModule = ImportList.find(Name);
+//    assert(FunctionsToImportPerModule != ImportList.end());
+//    std::unique_ptr<Module> SrcModule = ModuleLoader(Name);
+//    assert(&DestModule.getContext() == &SrcModule->getContext() &&
+//           "Context mismatch");
+//
+//    // If modules were created with lazy metadata loading, materialize it
+//    // now, before linking it (otherwise this will be a noop).
+//    SrcModule->materializeMetadata();
+//    UpgradeDebugInfo(*SrcModule);
+//
+//    auto &ImportGUIDs = FunctionsToImportPerModule->second;
+//    // Find the globals to import
+//    DenseSet<const GlobalValue *> GlobalsToImport;
+//    for (Function &F : *SrcModule) {
+//      if (!F.hasName())
+//        continue;
+//      auto GUID = F.getGUID();
+//      auto Import = ImportGUIDs.count(GUID);
+//      DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing function " << GUID
+//                   << " " << F.getName() << " from "
+//                   << SrcModule->getSourceFileName() << "\n");
+//      if (Import) {
+//        F.materialize();
+//        if (EnableImportMetadata) {
+//          // Add 'thinlto_src_module' metadata for statistics and debugging.
+//          F.setMetadata(
+//              "thinlto_src_module",
+//              llvm::MDNode::get(
+//                  DestModule.getContext(),
+//                  {llvm::MDString::get(DestModule.getContext(),
+//                                       SrcModule->getSourceFileName())}));
+//        }
+//        GlobalsToImport.insert(&F);
+//      }
+//    }
+//    for (GlobalVariable &GV : SrcModule->globals()) {
+//      if (!GV.hasName())
+//        continue;
+//      auto GUID = GV.getGUID();
+//      auto Import = ImportGUIDs.count(GUID);
+//      DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing global " << GUID
+//                   << " " << GV.getName() << " from "
+//                   << SrcModule->getSourceFileName() << "\n");
+//      if (Import) {
+//        GV.materialize();
+//        GlobalsToImport.insert(&GV);
+//      }
+//    }
+//    for (GlobalAlias &GA : SrcModule->aliases()) {
+//      if (!GA.hasName())
+//        continue;
+//      auto GUID = GA.getGUID();
+//      auto Import = ImportGUIDs.count(GUID);
+//      DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing alias " << GUID
+//                   << " " << GA.getName() << " from "
+//                   << SrcModule->getSourceFileName() << "\n");
+//      if (Import) {
+//        // Alias can't point to "available_externally". However when we import
+//        // linkOnceODR the linkage does not change. So we import the alias
+//        // and aliasee only in this case. This has been handled by
+//        // computeImportForFunction()
+//        GlobalObject *GO = GA.getBaseObject();
+//        assert(GO->hasLinkOnceODRLinkage() &&
+//               "Unexpected alias to a non-linkonceODR in import list");
+//#ifndef NDEBUG
+//        if (!GlobalsToImport.count(GO))
+//          DEBUG(dbgs() << " alias triggers importing aliasee " << GO->getGUID()
+//                       << " " << GO->getName() << " from "
+//                       << SrcModule->getSourceFileName() << "\n");
+//#endif
+//        GO->materialize();
+//        GlobalsToImport.insert(GO);
+//        GA.materialize();
+//        GlobalsToImport.insert(&GA);
+//      }
+//    }
+//
+//    // Link in the specified functions.
+//    if (renameModuleForThinLTO(*SrcModule, Index, &GlobalsToImport))
+//      return true;
+//
+//    if (PrintImports) {
+//      for (const auto *GV : GlobalsToImport)
+//        dbgs() << DestModule.getSourceFileName() << ": Import " << GV->getName()
+//               << " from " << SrcModule->getSourceFileName() << "\n";
+//    }
+//
+//    // Instruct the linker that the client will take care of linkonce resolution
+//    unsigned Flags = Linker::Flags::None;
+//    if (!ForceImportReferencedDiscardableSymbols)
+//      Flags |= Linker::Flags::DontForceLinkLinkonceODR;
+//
+//    if (TheLinker.linkInModule(std::move(SrcModule), Flags, &GlobalsToImport))
+//      report_fatal_error("Function Import: link error");
+//
+//    ImportedCount += GlobalsToImport.size();
+//  }
+//
+//  NumImported += ImportedCount;
+//
+//  DEBUG(dbgs() << "Imported " << ImportedCount << " functions for Module "
+//               << DestModule.getModuleIdentifier() << "\n");
+//  return ImportedCount;
 }
 
 /// Summary file to use for function importing when using -function-import from
