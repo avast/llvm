@@ -260,7 +260,13 @@ option(LLVM_ENABLE_FFI "Use libffi to call external functions from the interpret
 set(FFI_LIBRARY_DIR "" CACHE PATH "Additional directory, where CMake should search for libffi.so")
 set(FFI_INCLUDE_DIR "" CACHE PATH "Additional directory, where CMake should search for ffi.h or ffi/ffi.h")
 
-set(LLVM_TARGET_ARCH "host"
+# RetDec: original value = "host", we need to force X86 here so LLVM can be
+# built on architectures other than X86. This variable is used to set
+# LLVM_NATIVE_ARCH. Without forcing X86, LLVM_NATIVE_ARCH gets autodetected and
+# target for this architecture will be added. However, we only have one target,
+# x86.
+# See https://github.com/avast-tl/llvm/issues/3
+set(LLVM_TARGET_ARCH "X86"
   CACHE STRING "Set target to use for LLVM JIT or use \"host\" for automatic detection.")
 
 option(LLVM_ENABLE_TERMINFO "Use terminfo database if available." ON)
