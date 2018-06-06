@@ -2825,11 +2825,11 @@ if (const StoreInst *SI = dyn_cast<StoreInst>(&I))
 {
 	if (isa<ConstantInt>(SI->getValueOperand())
 			&& isa<GlobalVariable>(SI->getPointerOperand())
-			&& SI->hasMetadata())
+			&& SI->getPointerOperand()->getName() == "_asm_program_counter")
 	{
 		auto val = cast<ConstantInt>(SI->getValueOperand())->getZExtValue();
 
-		Out << "\n; ";
+		Out << "\n; 0x";
 		Out.write_hex(val);
 		Out << "\n";
 	}
