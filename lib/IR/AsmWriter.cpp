@@ -2829,7 +2829,9 @@ if (const StoreInst *SI = dyn_cast<StoreInst>(&I))
 	{
 		auto val = cast<ConstantInt>(SI->getValueOperand())->getZExtValue();
 
+		// DECOMPILER BEGIN (add the `0x` prefix before hex numbers)
 		Out << "\n; 0x";
+		// DECOMPILER END
 		Out.write_hex(val);
 		Out << "\n";
 	}
