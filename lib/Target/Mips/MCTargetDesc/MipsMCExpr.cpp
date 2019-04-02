@@ -8,12 +8,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "MipsMCExpr.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCObjectStreamer.h"
+#include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/Support/ELF.h"
+#include "llvm/MC/MCValue.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cstdint>
 
 using namespace llvm;
 
@@ -37,6 +43,11 @@ void MipsMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
   case MEK_Special:
     llvm_unreachable("MEK_None and MEK_Special are invalid");
     break;
+  case MEK_DTPREL:
+    // MEK_DTPREL is used for marking TLS DIEExpr only
+    // and contains a regular sub-expression.
+    getSubExpr()->print(OS, MAI, true);
+    return;
   case MEK_CALL_HI16:
     OS << "%call_hi";
     break;
@@ -151,6 +162,10 @@ MipsMCExpr::evaluateAsRelocatableImpl(MCValue &Res,
     case MEK_None:
     case MEK_Special:
       llvm_unreachable("MEK_None and MEK_Special are invalid");
+    case MEK_DTPREL:
+      // MEK_DTPREL is used for marking TLS DIEExpr only
+      // and contains a regular sub-expression.
+      return getSubExpr()->evaluateAsRelocatable(Res, Layout, Fixup);
     case MEK_DTPREL_HI:
     case MEK_DTPREL_LO:
     case MEK_GOT:
@@ -240,8 +255,6 @@ void MipsMCExpr::fixELFSymbolsInTLSFixups(MCAssembler &Asm) const {
     break;
   case MEK_CALL_HI16:
   case MEK_CALL_LO16:
-  case MEK_DTPREL_HI:
-  case MEK_DTPREL_LO:
   case MEK_GOT:
   case MEK_GOT_CALL:
   case MEK_GOT_DISP:
@@ -257,14 +270,17 @@ void MipsMCExpr::fixELFSymbolsInTLSFixups(MCAssembler &Asm) const {
   case MEK_NEG:
   case MEK_PCREL_HI16:
   case MEK_PCREL_LO16:
-  case MEK_TLSLDM:
     // If we do have nested target-specific expressions, they will be in
     // a consecutive chain.
     if (const MipsMCExpr *E = dyn_cast<const MipsMCExpr>(getSubExpr()))
       E->fixELFSymbolsInTLSFixups(Asm);
     break;
-  case MEK_GOTTPREL:
+  case MEK_DTPREL:
+  case MEK_DTPREL_HI:
+  case MEK_DTPREL_LO:
+  case MEK_TLSLDM:
   case MEK_TLSGD:
+  case MEK_GOTTPREL:
   case MEK_TPREL_HI:
   case MEK_TPREL_LO:
     fixELFSymbolsInTLSFixupsImpl(getSubExpr(), Asm);

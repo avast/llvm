@@ -13,17 +13,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm-c/Initialization.h"
 #include "llvm-c/Transforms/IPO.h"
-#include "llvm/InitializePasses.h"
+#include "llvm-c/Initialization.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/FunctionAttrs.h"
 
 using namespace llvm;
 
 void llvm::initializeIPO(PassRegistry &Registry) {
   initializeArgPromotionPass(Registry);
+  initializeCalledValuePropagationLegacyPassPass(Registry);
   initializeConstantMergeLegacyPassPass(Registry);
   initializeCrossDSOCFIPass(Registry);
   initializeDAEPass(Registry);
@@ -31,13 +33,15 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeForceFunctionAttrsLegacyPassPass(Registry);
   initializeGlobalDCELegacyPassPass(Registry);
   initializeGlobalOptLegacyPassPass(Registry);
+  initializeGlobalSplitPass(Registry);
+  initializeHotColdSplittingLegacyPassPass(Registry);
   initializeIPCPPass(Registry);
-  initializeAlwaysInlinerPass(Registry);
+  initializeAlwaysInlinerLegacyPassPass(Registry);
   initializeSimpleInlinerPass(Registry);
   initializeInferFunctionAttrsLegacyPassPass(Registry);
   initializeInternalizeLegacyPassPass(Registry);
   initializeLoopExtractorPass(Registry);
-  initializeBlockExtractorPassPass(Registry);
+  initializeBlockExtractorPass(Registry);
   initializeSingleLoopExtractorPass(Registry);
   initializeLowerTypeTestsPass(Registry);
   initializeMergeFunctionsPass(Registry);
@@ -45,6 +49,7 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializeReversePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializePruneEHPass(Registry);
+  initializeIPSCCPLegacyPassPass(Registry);
   initializeStripDeadPrototypesLegacyPassPass(Registry);
   initializeStripSymbolsPass(Registry);
   initializeStripDebugDeclarePass(Registry);
@@ -52,7 +57,8 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeStripNonDebugSymbolsPass(Registry);
   initializeBarrierNoopPass(Registry);
   initializeEliminateAvailableExternallyLegacyPassPass(Registry);
-  initializeFunctionImportPassPass(Registry);
+  initializeSampleProfileLoaderLegacyPassPass(Registry);
+  initializeFunctionImportLegacyPassPass(Registry);
   initializeWholeProgramDevirtPass(Registry);
 }
 
@@ -62,6 +68,10 @@ void LLVMInitializeIPO(LLVMPassRegistryRef R) {
 
 void LLVMAddArgumentPromotionPass(LLVMPassManagerRef PM) {
   unwrap(PM)->add(createArgumentPromotionPass());
+}
+
+void LLVMAddCalledValuePropagationPass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createCalledValuePropagationPass());
 }
 
 void LLVMAddConstantMergePass(LLVMPassManagerRef PM) {
@@ -81,7 +91,7 @@ void LLVMAddFunctionInliningPass(LLVMPassManagerRef PM) {
 }
 
 void LLVMAddAlwaysInlinerPass(LLVMPassManagerRef PM) {
-  unwrap(PM)->add(llvm::createAlwaysInlinerPass());
+  unwrap(PM)->add(llvm::createAlwaysInlinerLegacyPass());
 }
 
 void LLVMAddGlobalDCEPass(LLVMPassManagerRef PM) {

@@ -1,4 +1,4 @@
-//===-- llvm/CodeGen/GCStrategy.h - Garbage collection ----------*- C++ -*-===//
+//===- llvm/CodeGen/GCStrategy.h - Garbage collection -----------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -47,28 +47,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_IR_GCSTRATEGY_H
-#define LLVM_IR_GCSTRATEGY_H
+#ifndef LLVM_CODEGEN_GCSTRATEGY_H
+#define LLVM_CODEGEN_GCSTRATEGY_H
 
+#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Value.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Registry.h"
 #include <string>
 
 namespace llvm {
-namespace GC {
-/// PointKind - Used to indicate whether the address of the call instruction
-/// or the address after the call instruction is listed in the stackmap.  For
-/// most runtimes, PostCall safepoints are appropriate.
-///
-enum PointKind {
-  PreCall, ///< Instr is a call instruction.
-  PostCall ///< Instr is the return address of a call.
-};
-}
+
+class Type;
 
 /// GCStrategy describes a garbage collector algorithm's code generation
 /// requirements, and provides overridable hooks for those needs which cannot
@@ -77,38 +66,25 @@ enum PointKind {
 /// be immutable.
 class GCStrategy {
 private:
-  std::string Name;
   friend class GCModuleInfo;
 
-protected:
-  bool UseStatepoints; /// Uses gc.statepoints as opposed to gc.roots,
-                       /// if set, none of the other options can be
-                       /// anything but their default values.
+  std::string Name;
 
-  unsigned NeededSafePoints; ///< Bitmask of required safe points.
-  bool CustomReadBarriers;   ///< Default is to insert loads.
-  bool CustomWriteBarriers;  ///< Default is to insert stores.
-  bool CustomRoots;          ///< Default is to pass through to backend.
-  bool InitRoots;            ///< If set, roots are nulled during lowering.
-  bool UsesMetadata;         ///< If set, backend must emit metadata tables.
+protected:
+  bool UseStatepoints = false; /// Uses gc.statepoints as opposed to gc.roots,
+                               /// if set, none of the other options can be
+                               /// anything but their default values.
+
+  bool NeededSafePoints = false;    ///< if set, calls are inferred to be safepoints
+  bool UsesMetadata = false;     ///< If set, backend must emit metadata tables.
 
 public:
   GCStrategy();
-  virtual ~GCStrategy() {}
+  virtual ~GCStrategy() = default;
 
   /// Return the name of the GC strategy.  This is the value of the collector
   /// name string specified on functions which use this strategy.
   const std::string &getName() const { return Name; }
-
-  /// By default, write barriers are replaced with simple store
-  /// instructions. If true, you must provide a custom pass to lower 
-  /// calls to @llvm.gcwrite.
-  bool customWriteBarrier() const { return CustomWriteBarriers; }
-
-  /// By default, read barriers are replaced with simple load
-  /// instructions. If true, you must provide a custom pass to lower 
-  /// calls to @llvm.gcread.
-  bool customReadBarrier() const { return CustomReadBarriers; }
 
   /// Returns true if this strategy is expecting the use of gc.statepoints,
   /// and false otherwise.
@@ -132,25 +108,8 @@ public:
    */
   ///@{
 
-  /// True if safe points of any kind are required. By default, none are
-  /// recorded.
-  bool needsSafePoints() const { return NeededSafePoints != 0; }
-
-  /// True if the given kind of safe point is required. By default, none are
-  /// recorded.
-  bool needsSafePoint(GC::PointKind Kind) const {
-    return (NeededSafePoints & 1 << Kind) != 0;
-  }
-
-  /// By default, roots are left for the code generator so it can generate a
-  /// stack map. If true, you must provide a custom pass to lower 
-  /// calls to @llvm.gcroot.
-  bool customRoots() const { return CustomRoots; }
-
-  /// If set, gcroot intrinsics should initialize their allocas to null
-  /// before the first use. This is necessary for most GCs and is enabled by
-  /// default.
-  bool initializeRoots() const { return InitRoots; }
+  /// True if safe points need to be inferred on call sites
+  bool needsSafePoints() const { return NeededSafePoints; }
 
   /// If set, appropriate metadata tables must be emitted by the back-end
   /// (assembler, JIT, or otherwise). For statepoint, this method is
@@ -171,7 +130,8 @@ public:
 /// Note that to use a custom GCMetadataPrinter w/gc.roots, you must also
 /// register your GCMetadataPrinter subclass with the
 /// GCMetadataPrinterRegistery as well.
-typedef Registry<GCStrategy> GCRegistry;
-}
+using GCRegistry = Registry<GCStrategy>;
 
-#endif
+} // end namespace llvm
+
+#endif // LLVM_CODEGEN_GCSTRATEGY_H

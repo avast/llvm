@@ -14,27 +14,26 @@
 //===----------------------------------------------------------------------===//
 
 #include "AArch64TargetStreamer.h"
-#include "llvm/MC/MCELFStreamer.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/StringExtras.h"
+#include "AArch64WinCOFFStreamer.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCObjectStreamer.h"
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSection.h"
-#include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/MC/MCValue.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/ELF.h"
-#include "llvm/Support/ErrorHandling.h"
+#include "llvm/MC/MCWinCOFFStreamer.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -61,16 +60,6 @@ void AArch64TargetAsmStreamer::emitInst(uint32_t Inst) {
   OS << "\t.inst\t0x" << Twine::utohexstr(Inst) << "\n";
 }
 
-class AArch64TargetELFStreamer : public AArch64TargetStreamer {
-private:
-  AArch64ELFStreamer &getStreamer();
-
-  void emitInst(uint32_t Inst) override;
-
-public:
-  AArch64TargetELFStreamer(MCStreamer &S) : AArch64TargetStreamer(S) {}
-};
-
 /// Extend the generic ELFStreamer class so that it can emit mapping symbols at
 /// the appropriate points in the object files. These symbols are defined in the
 /// AArch64 ELF ABI:
@@ -86,12 +75,12 @@ public:
 /// by MachO. Beware!
 class AArch64ELFStreamer : public MCELFStreamer {
 public:
-  friend class AArch64TargetELFStreamer;
-
-  AArch64ELFStreamer(MCContext &Context, MCAsmBackend &TAB,
-                     raw_pwrite_stream &OS, MCCodeEmitter *Emitter)
-      : MCELFStreamer(Context, TAB, OS, Emitter), MappingSymbolCounter(0),
-        LastEMS(EMS_None) {}
+  AArch64ELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> TAB,
+                     std::unique_ptr<MCObjectWriter> OW,
+                     std::unique_ptr<MCCodeEmitter> Emitter)
+      : MCELFStreamer(Context, std::move(TAB), std::move(OW),
+                      std::move(Emitter)),
+        MappingSymbolCounter(0), LastEMS(EMS_None) {}
 
   void ChangeSection(MCSection *Section, const MCExpr *Subsection) override {
     // We have to keep track of the mapping symbol state of any sections we
@@ -103,11 +92,19 @@ public:
     MCELFStreamer::ChangeSection(Section, Subsection);
   }
 
+  // Reset state between object emissions
+  void reset() override {
+    MappingSymbolCounter = 0;
+    MCELFStreamer::reset();
+    LastMappingSymbols.clear();
+    LastEMS = EMS_None;
+  }
+
   /// This function is the one used to emit instruction data into the ELF
   /// streamer. We override it to add the appropriate mapping symbol if
   /// necessary.
-  void EmitInstruction(const MCInst &Inst,
-                       const MCSubtargetInfo &STI) override {
+  void EmitInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
+                       bool) override {
     EmitA64MappingSymbol();
     MCELFStreamer::EmitInstruction(Inst, STI);
   }
@@ -145,6 +142,11 @@ public:
     MCELFStreamer::EmitValueImpl(Value, Size, Loc);
   }
 
+  void emitFill(const MCExpr &NumBytes, uint64_t FillValue,
+                                  SMLoc Loc) override {
+    EmitDataMappingSymbol();
+    MCObjectStreamer::emitFill(NumBytes, FillValue, Loc);
+  }
 private:
   enum ElfMappingSymbol {
     EMS_None,
@@ -180,7 +182,10 @@ private:
   DenseMap<const MCSection *, ElfMappingSymbol> LastMappingSymbols;
   ElfMappingSymbol LastEMS;
 };
+
 } // end anonymous namespace
+
+namespace llvm {
 
 AArch64ELFStreamer &AArch64TargetELFStreamer::getStreamer() {
   return static_cast<AArch64ELFStreamer &>(Streamer);
@@ -190,7 +195,6 @@ void AArch64TargetELFStreamer::emitInst(uint32_t Inst) {
   getStreamer().emitInst(Inst);
 }
 
-namespace llvm {
 MCTargetStreamer *createAArch64AsmTargetStreamer(MCStreamer &S,
                                                  formatted_raw_ostream &OS,
                                                  MCInstPrinter *InstPrint,
@@ -198,20 +202,16 @@ MCTargetStreamer *createAArch64AsmTargetStreamer(MCStreamer &S,
   return new AArch64TargetAsmStreamer(S, OS);
 }
 
-MCELFStreamer *createAArch64ELFStreamer(MCContext &Context, MCAsmBackend &TAB,
-                                        raw_pwrite_stream &OS,
-                                        MCCodeEmitter *Emitter, bool RelaxAll) {
-  AArch64ELFStreamer *S = new AArch64ELFStreamer(Context, TAB, OS, Emitter);
+MCELFStreamer *createAArch64ELFStreamer(MCContext &Context,
+                                        std::unique_ptr<MCAsmBackend> TAB,
+                                        std::unique_ptr<MCObjectWriter> OW,
+                                        std::unique_ptr<MCCodeEmitter> Emitter,
+                                        bool RelaxAll) {
+  AArch64ELFStreamer *S = new AArch64ELFStreamer(
+      Context, std::move(TAB), std::move(OW), std::move(Emitter));
   if (RelaxAll)
     S->getAssembler().setRelaxAll(true);
   return S;
 }
 
-MCTargetStreamer *
-createAArch64ObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo &STI) {
-  const Triple &TT = STI.getTargetTriple();
-  if (TT.isOSBinFormatELF())
-    return new AArch64TargetELFStreamer(S);
-  return nullptr;
-}
-}
+} // end namespace llvm

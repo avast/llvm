@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -28,7 +29,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLowering.h"
 using namespace llvm;
 
 /// XCoreDAGToDAGISel - XCore specific code to select XCore machine
@@ -67,7 +67,7 @@ namespace {
     bool SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
                                       std::vector<SDValue> &OutOps) override;
 
-    const char *getPassName() const override {
+    StringRef getPassName() const override {
       return "XCore DAG->DAG Pattern Instruction Selection";
     }
 
@@ -150,11 +150,10 @@ void XCoreDAGToDAGISel::Select(SDNode *N) {
       SDNode *node = CurDAG->getMachineNode(XCore::LDWCP_lru6, dl, MVT::i32,
                                             MVT::Other, CPIdx,
                                             CurDAG->getEntryNode());
-      MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
-      MemOp[0] =
+      MachineMemOperand *MemOp =
           MF->getMachineMemOperand(MachinePointerInfo::getConstantPool(*MF),
                                    MachineMemOperand::MOLoad, 4, 4);
-      cast<MachineSDNode>(node)->setMemRefs(MemOp, MemOp + 1);
+      CurDAG->setNodeMemRefs(cast<MachineSDNode>(node), {MemOp});
       ReplaceNode(N, node);
       return;
     }

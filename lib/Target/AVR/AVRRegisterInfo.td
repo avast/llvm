@@ -110,8 +110,6 @@ CoveredBySubRegs = 1 in
 // Register Classes
 //===----------------------------------------------------------------------===//
 
-//:TODO: use proper set instructions instead of using always "add"
-
 // Main 8-bit register class.
 def GPR8 : RegisterClass<"AVR", [i8], 8,
   (
@@ -159,6 +157,26 @@ def DREGS : RegisterClass<"AVR", [i16], 8,
     R9R8, R7R6, R5R4, R3R2, R1R0
   )>;
 
+// The 16-bit DREGS register class, excluding the Z pointer register.
+//
+// This is used by instructions which cause high pointer register
+// contention which leads to an assertion in the register allocator.
+//
+// There is no technical reason why instructions that use this class
+// cannot use Z; it's simply a workaround a regalloc bug.
+//
+// More information can be found in PR39553.
+def DREGS_WITHOUT_Z_WORKAROUND : RegisterClass<"AVR", [i16], 8,
+  (
+    // Return value and arguments.
+    add R25R24, R19R18, R21R20, R23R22,
+    // Scratch registers.
+    R27R26,
+    // Callee saved registers.
+    R29R28, R17R16, R15R14, R13R12, R11R10,
+    R9R8, R7R6, R5R4, R3R2, R1R0
+  )>;
+
 // 16-bit register class for immediate instructions.
 def DLDREGS : RegisterClass<"AVR", [i16], 8,
   (
@@ -199,14 +217,11 @@ def PTRDISPREGS : RegisterClass<"AVR", [i16], 8,
 
 // We have a bunch of instructions with an explicit Z register argument. We
 // model this using a register class containing only the Z register.
-// :TODO: Rename to 'ZREG'.
-def ZREGS : RegisterClass<"AVR", [i16], 8, (add R31R30)>;
+def ZREG : RegisterClass<"AVR", [i16], 8, (add R31R30)>;
 
 // Register class used for the stack read pseudo instruction.
 def GPRSP: RegisterClass<"AVR", [i16], 8, (add SP)>;
 
-//:TODO: if we remove this we get an error in tablegen
-//:TODO: this is just a hack, remove it once add16 works!
 // Status register.
 def SREG : AVRReg<14, "FLAGS">, DwarfRegNum<[88]>;
 def CCR : RegisterClass<"AVR", [i8], 8, (add SREG)>

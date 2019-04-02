@@ -17,6 +17,7 @@
 
 #include "llvm/TableGen/Main.h"
 #include "TGParser.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -45,22 +46,29 @@ static cl::list<std::string>
 IncludeDirs("I", cl::desc("Directory of include files"),
             cl::value_desc("directory"), cl::Prefix);
 
-/// \brief Create a dependency file for `-d` option.
+static cl::list<std::string>
+MacroNames("D", cl::desc("Name of the macro to be defined"),
+            cl::value_desc("macro name"), cl::Prefix);
+
+static int reportError(const char *ProgName, Twine Msg) {
+  errs() << ProgName << ": " << Msg;
+  errs().flush();
+  return 1;
+}
+
+/// Create a dependency file for `-d` option.
 ///
 /// This functionality is really only for the benefit of the build system.
 /// It is similar to GCC's `-M*` family of options.
 static int createDependencyFile(const TGParser &Parser, const char *argv0) {
-  if (OutputFilename == "-") {
-    errs() << argv0 << ": the option -d must be used together with -o\n";
-    return 1;
-  }
+  if (OutputFilename == "-")
+    return reportError(argv0, "the option -d must be used together with -o\n");
+
   std::error_code EC;
-  tool_output_file DepOut(DependFilename, EC, sys::fs::F_Text);
-  if (EC) {
-    errs() << argv0 << ": error opening " << DependFilename << ":"
-           << EC.message() << "\n";
-    return 1;
-  }
+  ToolOutputFile DepOut(DependFilename, EC, sys::fs::F_Text);
+  if (EC)
+    return reportError(argv0, "error opening " + DependFilename + ":" +
+                                  EC.message() + "\n");
   DepOut.os() << OutputFilename << ":";
   for (const auto &Dep : Parser.getDependencies()) {
     DepOut.os() << ' ' << Dep.first;
@@ -76,11 +84,9 @@ int llvm::TableGenMain(char *argv0, TableGenMainFn *MainFn) {
   // Parse the input file.
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
       MemoryBuffer::getFileOrSTDIN(InputFilename);
-  if (std::error_code EC = FileOrErr.getError()) {
-    errs() << "Could not open input file '" << InputFilename
-           << "': " << EC.message() << "\n";
-    return 1;
-  }
+  if (std::error_code EC = FileOrErr.getError())
+    return reportError(argv0, "Could not open input file '" + InputFilename +
+                                  "': " + EC.message() + "\n");
 
   // Tell SrcMgr about this buffer, which is what TGParser will pick up.
   SrcMgr.AddNewSourceBuffer(std::move(*FileOrErr), SMLoc());
@@ -89,32 +95,44 @@ int llvm::TableGenMain(char *argv0, TableGenMainFn *MainFn) {
   // it later.
   SrcMgr.setIncludeDirs(IncludeDirs);
 
-  TGParser Parser(SrcMgr, Records);
+  TGParser Parser(SrcMgr, MacroNames, Records);
 
   if (Parser.ParseFile())
     return 1;
 
-  std::error_code EC;
-  tool_output_file Out(OutputFilename, EC, sys::fs::F_Text);
-  if (EC) {
-    errs() << argv0 << ": error opening " << OutputFilename << ":"
-           << EC.message() << "\n";
+  // Write output to memory.
+  std::string OutString;
+  raw_string_ostream Out(OutString);
+  if (MainFn(Out, Records))
     return 1;
-  }
+
+  // Always write the depfile, even if the main output hasn't changed.
+  // If it's missing, Ninja considers the output dirty.  If this was below
+  // the early exit below and someone deleted the .inc.d file but not the .inc
+  // file, tablegen would never write the depfile.
   if (!DependFilename.empty()) {
     if (int Ret = createDependencyFile(Parser, argv0))
       return Ret;
   }
 
-  if (MainFn(Out.os(), Records))
-    return 1;
+  // Only updates the real output file if there are any differences.
+  // This prevents recompilation of all the files depending on it if there
+  // aren't any.
+  if (auto ExistingOrErr = MemoryBuffer::getFile(OutputFilename))
+    if (std::move(ExistingOrErr.get())->getBuffer() == Out.str())
+      return 0;
 
-  if (ErrorsPrinted > 0) {
-    errs() << argv0 << ": " << ErrorsPrinted << " errors.\n";
-    return 1;
-  }
+  std::error_code EC;
+  ToolOutputFile OutFile(OutputFilename, EC, sys::fs::F_Text);
+  if (EC)
+    return reportError(argv0, "error opening " + OutputFilename + ":" +
+                                  EC.message() + "\n");
+  OutFile.os() << Out.str();
+
+  if (ErrorsPrinted > 0)
+    return reportError(argv0, Twine(ErrorsPrinted) + " errors.\n");
 
   // Declare success.
-  Out.keep();
+  OutFile.keep();
   return 0;
 }

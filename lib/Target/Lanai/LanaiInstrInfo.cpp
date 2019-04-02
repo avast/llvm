@@ -101,12 +101,12 @@ bool LanaiInstrInfo::areMemAccessesTriviallyDisjoint(
   // the width doesn't overlap the offset of a higher memory access,
   // then the memory accesses are different.
   const TargetRegisterInfo *TRI = &getRegisterInfo();
-  unsigned BaseRegA = 0, BaseRegB = 0;
+  MachineOperand *BaseOpA = nullptr, *BaseOpB = nullptr;
   int64_t OffsetA = 0, OffsetB = 0;
   unsigned int WidthA = 0, WidthB = 0;
-  if (getMemOpBaseRegImmOfsWidth(MIa, BaseRegA, OffsetA, WidthA, TRI) &&
-      getMemOpBaseRegImmOfsWidth(MIb, BaseRegB, OffsetB, WidthB, TRI)) {
-    if (BaseRegA == BaseRegB) {
+  if (getMemOperandWithOffsetWidth(MIa, BaseOpA, OffsetA, WidthA, TRI) &&
+      getMemOperandWithOffsetWidth(MIb, BaseOpB, OffsetB, WidthB, TRI)) {
+    if (BaseOpA->isIdenticalTo(*BaseOpB)) {
       int LowOffset = std::min(OffsetA, OffsetB);
       int HighOffset = std::max(OffsetA, OffsetB);
       int LowWidth = (LowOffset == OffsetA) ? WidthA : WidthB;
@@ -518,7 +518,7 @@ LanaiInstrInfo::optimizeSelect(MachineInstr &MI,
   const MCInstrDesc &DefDesc = DefMI->getDesc();
   for (unsigned i = 1, e = DefDesc.getNumOperands();
        i != e && !DefDesc.OpInfo[i].isPredicate(); ++i)
-    NewMI.addOperand(DefMI->getOperand(i));
+    NewMI.add(DefMI->getOperand(i));
 
   unsigned CondCode = MI.getOperand(3).getImm();
   if (Invert)
@@ -531,7 +531,7 @@ LanaiInstrInfo::optimizeSelect(MachineInstr &MI,
   // register operand tied to the first def.  The tie makes the register
   // allocator ensure the FalseReg is allocated the same register as operand 0.
   FalseReg.setImplicit();
-  NewMI.addOperand(FalseReg);
+  NewMI.add(FalseReg);
   NewMI->tieOperands(0, NewMI->getNumOperands() - 1);
 
   // Update SeenMIs set: register newly created MI and erase removed DefMI.
@@ -558,7 +558,7 @@ LanaiInstrInfo::optimizeSelect(MachineInstr &MI,
 // - FalseBlock is set to the destination if condition evaluates to false (it
 //   is the nullptr if the branch is unconditional);
 // - condition is populated with machine operands needed to generate the branch
-//   to insert in InsertBranch;
+//   to insert in insertBranch;
 // Returns: false if branch could successfully be analyzed.
 bool LanaiInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
                                    MachineBasicBlock *&TrueBlock,
@@ -573,8 +573,8 @@ bool LanaiInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   while (Instruction != MBB.begin()) {
     --Instruction;
 
-    // Skip over debug values.
-    if (Instruction->isDebugValue())
+    // Skip over debug instructions.
+    if (Instruction->isDebugInstr())
       continue;
 
     // Working from the bottom, when we see a non-terminator
@@ -641,10 +641,10 @@ bool LanaiInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   return false;
 }
 
-// ReverseBranchCondition - Reverses the branch condition of the specified
+// reverseBranchCondition - Reverses the branch condition of the specified
 // condition list, returning false on success and true if it cannot be
 // reversed.
-bool LanaiInstrInfo::ReverseBranchCondition(
+bool LanaiInstrInfo::reverseBranchCondition(
     SmallVectorImpl<llvm::MachineOperand> &Condition) const {
   assert((Condition.size() == 1) &&
          "Lanai branch conditions should have one component.");
@@ -658,13 +658,15 @@ bool LanaiInstrInfo::ReverseBranchCondition(
 // Insert the branch with condition specified in condition and given targets
 // (TrueBlock and FalseBlock). This function returns the number of machine
 // instructions inserted.
-unsigned LanaiInstrInfo::InsertBranch(MachineBasicBlock &MBB,
+unsigned LanaiInstrInfo::insertBranch(MachineBasicBlock &MBB,
                                       MachineBasicBlock *TrueBlock,
                                       MachineBasicBlock *FalseBlock,
                                       ArrayRef<MachineOperand> Condition,
-                                      const DebugLoc &DL) const {
+                                      const DebugLoc &DL,
+                                      int *BytesAdded) const {
   // Shouldn't be a fall through.
-  assert(TrueBlock && "InsertBranch must not be told to insert a fallthrough");
+  assert(TrueBlock && "insertBranch must not be told to insert a fallthrough");
+  assert(!BytesAdded && "code size not handled");
 
   // If condition is empty then an unconditional branch is being inserted.
   if (Condition.empty()) {
@@ -688,13 +690,16 @@ unsigned LanaiInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   return 2;
 }
 
-unsigned LanaiInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
+unsigned LanaiInstrInfo::removeBranch(MachineBasicBlock &MBB,
+                                      int *BytesRemoved) const {
+  assert(!BytesRemoved && "code size not handled");
+
   MachineBasicBlock::iterator Instruction = MBB.end();
   unsigned Count = 0;
 
   while (Instruction != MBB.begin()) {
     --Instruction;
-    if (Instruction->isDebugValue())
+    if (Instruction->isDebugInstr())
       continue;
     if (Instruction->getOpcode() != Lanai::BT &&
         Instruction->getOpcode() != Lanai::BRCC) {
@@ -728,8 +733,13 @@ unsigned LanaiInstrInfo::isLoadFromStackSlotPostFE(const MachineInstr &MI,
     if ((Reg = isLoadFromStackSlot(MI, FrameIndex)))
       return Reg;
     // Check for post-frame index elimination operations
-    const MachineMemOperand *Dummy;
-    return hasLoadFromStackSlot(MI, Dummy, FrameIndex);
+    SmallVector<const MachineMemOperand *, 1> Accesses;
+    if (hasLoadFromStackSlot(MI, Accesses)){
+      FrameIndex =
+          cast<FixedStackPseudoSourceValue>(Accesses.front()->getPseudoValue())
+              ->getFrameIndex();
+      return 1;
+    }
   }
   return 0;
 }
@@ -745,9 +755,9 @@ unsigned LanaiInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
   return 0;
 }
 
-bool LanaiInstrInfo::getMemOpBaseRegImmOfsWidth(
-    MachineInstr &LdSt, unsigned &BaseReg, int64_t &Offset, unsigned &Width,
-    const TargetRegisterInfo * /*TRI*/) const {
+bool LanaiInstrInfo::getMemOperandWithOffsetWidth(
+    MachineInstr &LdSt, MachineOperand *&BaseOp, int64_t &Offset,
+    unsigned &Width, const TargetRegisterInfo * /*TRI*/) const {
   // Handle only loads/stores with base register followed by immediate offset
   // and with add as ALU op.
   if (LdSt.getNumOperands() != 4)
@@ -777,14 +787,17 @@ bool LanaiInstrInfo::getMemOpBaseRegImmOfsWidth(
     break;
   }
 
-  BaseReg = LdSt.getOperand(1).getReg();
+  BaseOp = &LdSt.getOperand(1);
   Offset = LdSt.getOperand(2).getImm();
+  assert(BaseOp->isReg() && "getMemOperandWithOffset only supports base "
+                            "operands of type register.");
   return true;
 }
 
-bool LanaiInstrInfo::getMemOpBaseRegImmOfs(
-    MachineInstr &LdSt, unsigned &BaseReg, int64_t &Offset,
-    const TargetRegisterInfo *TRI) const {
+bool LanaiInstrInfo::getMemOperandWithOffset(MachineInstr &LdSt,
+                                        MachineOperand *&BaseOp,
+                                        int64_t &Offset,
+                                        const TargetRegisterInfo *TRI) const {
   switch (LdSt.getOpcode()) {
   default:
     return false;
@@ -798,6 +811,6 @@ bool LanaiInstrInfo::getMemOpBaseRegImmOfs(
   case Lanai::LDBs_RI:
   case Lanai::LDBz_RI:
     unsigned Width;
-    return getMemOpBaseRegImmOfsWidth(LdSt, BaseReg, Offset, Width, TRI);
+    return getMemOperandWithOffsetWidth(LdSt, BaseOp, Offset, Width, TRI);
   }
 }

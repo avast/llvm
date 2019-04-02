@@ -38,25 +38,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "msp430-lower"
 
-typedef enum {
-  NoHWMult,
-  HWMultIntr,
-  HWMultNoIntr
-} HWMultUseMode;
-
-static cl::opt<HWMultUseMode>
-HWMultMode("msp430-hwmult-mode", cl::Hidden,
-           cl::desc("Hardware multiplier use mode"),
-           cl::init(HWMultNoIntr),
-           cl::values(
-             clEnumValN(NoHWMult, "no",
-                "Do not use hardware multiplier"),
-             clEnumValN(HWMultIntr, "interrupts",
-                "Assume hardware multiplier can be used inside interrupts"),
-             clEnumValN(HWMultNoIntr, "use",
-                "Assume hardware multiplier cannot be used inside interrupts"),
-             clEnumValEnd));
-
 MSP430TargetLowering::MSP430TargetLowering(const TargetMachine &TM,
                                            const MSP430Subtarget &STI)
     : TargetLowering(TM) {
@@ -114,6 +95,8 @@ MSP430TargetLowering::MSP430TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SIGN_EXTEND,      MVT::i16,   Custom);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i8, Expand);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i16, Expand);
+  setOperationAction(ISD::STACKSAVE,        MVT::Other, Expand);
+  setOperationAction(ISD::STACKRESTORE,     MVT::Other, Expand);
 
   setOperationAction(ISD::CTTZ,             MVT::i8,    Expand);
   setOperationAction(ISD::CTTZ,             MVT::i16,   Expand);
@@ -132,29 +115,29 @@ MSP430TargetLowering::MSP430TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,   Expand);
 
   // FIXME: Implement efficiently multiplication by a constant
-  setOperationAction(ISD::MUL,              MVT::i8,    Expand);
-  setOperationAction(ISD::MULHS,            MVT::i8,    Expand);
-  setOperationAction(ISD::MULHU,            MVT::i8,    Expand);
-  setOperationAction(ISD::SMUL_LOHI,        MVT::i8,    Expand);
-  setOperationAction(ISD::UMUL_LOHI,        MVT::i8,    Expand);
-  setOperationAction(ISD::MUL,              MVT::i16,   Expand);
+  setOperationAction(ISD::MUL,              MVT::i8,    Promote);
+  setOperationAction(ISD::MULHS,            MVT::i8,    Promote);
+  setOperationAction(ISD::MULHU,            MVT::i8,    Promote);
+  setOperationAction(ISD::SMUL_LOHI,        MVT::i8,    Promote);
+  setOperationAction(ISD::UMUL_LOHI,        MVT::i8,    Promote);
+  setOperationAction(ISD::MUL,              MVT::i16,   LibCall);
   setOperationAction(ISD::MULHS,            MVT::i16,   Expand);
   setOperationAction(ISD::MULHU,            MVT::i16,   Expand);
   setOperationAction(ISD::SMUL_LOHI,        MVT::i16,   Expand);
   setOperationAction(ISD::UMUL_LOHI,        MVT::i16,   Expand);
 
-  setOperationAction(ISD::UDIV,             MVT::i8,    Expand);
-  setOperationAction(ISD::UDIVREM,          MVT::i8,    Expand);
-  setOperationAction(ISD::UREM,             MVT::i8,    Expand);
-  setOperationAction(ISD::SDIV,             MVT::i8,    Expand);
-  setOperationAction(ISD::SDIVREM,          MVT::i8,    Expand);
-  setOperationAction(ISD::SREM,             MVT::i8,    Expand);
-  setOperationAction(ISD::UDIV,             MVT::i16,   Expand);
+  setOperationAction(ISD::UDIV,             MVT::i8,    Promote);
+  setOperationAction(ISD::UDIVREM,          MVT::i8,    Promote);
+  setOperationAction(ISD::UREM,             MVT::i8,    Promote);
+  setOperationAction(ISD::SDIV,             MVT::i8,    Promote);
+  setOperationAction(ISD::SDIVREM,          MVT::i8,    Promote);
+  setOperationAction(ISD::SREM,             MVT::i8,    Promote);
+  setOperationAction(ISD::UDIV,             MVT::i16,   LibCall);
   setOperationAction(ISD::UDIVREM,          MVT::i16,   Expand);
-  setOperationAction(ISD::UREM,             MVT::i16,   Expand);
-  setOperationAction(ISD::SDIV,             MVT::i16,   Expand);
+  setOperationAction(ISD::UREM,             MVT::i16,   LibCall);
+  setOperationAction(ISD::SDIV,             MVT::i16,   LibCall);
   setOperationAction(ISD::SDIVREM,          MVT::i16,   Expand);
-  setOperationAction(ISD::SREM,             MVT::i16,   Expand);
+  setOperationAction(ISD::SREM,             MVT::i16,   LibCall);
 
   // varargs support
   setOperationAction(ISD::VASTART,          MVT::Other, Custom);
@@ -163,17 +146,190 @@ MSP430TargetLowering::MSP430TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::VACOPY,           MVT::Other, Expand);
   setOperationAction(ISD::JumpTable,        MVT::i16,   Custom);
 
-  // Libcalls names.
-  if (HWMultMode == HWMultIntr) {
-    setLibcallName(RTLIB::MUL_I8,  "__mulqi3hw");
-    setLibcallName(RTLIB::MUL_I16, "__mulhi3hw");
-  } else if (HWMultMode == HWMultNoIntr) {
-    setLibcallName(RTLIB::MUL_I8,  "__mulqi3hw_noint");
-    setLibcallName(RTLIB::MUL_I16, "__mulhi3hw_noint");
+  // EABI Libcalls - EABI Section 6.2
+  const struct {
+    const RTLIB::Libcall Op;
+    const char * const Name;
+    const ISD::CondCode Cond;
+  } LibraryCalls[] = {
+    // Floating point conversions - EABI Table 6
+    { RTLIB::FPROUND_F64_F32,   "__mspabi_cvtdf",   ISD::SETCC_INVALID },
+    { RTLIB::FPEXT_F32_F64,     "__mspabi_cvtfd",   ISD::SETCC_INVALID },
+    // The following is NOT implemented in libgcc
+    //{ RTLIB::FPTOSINT_F64_I16,  "__mspabi_fixdi", ISD::SETCC_INVALID },
+    { RTLIB::FPTOSINT_F64_I32,  "__mspabi_fixdli",  ISD::SETCC_INVALID },
+    { RTLIB::FPTOSINT_F64_I64,  "__mspabi_fixdlli", ISD::SETCC_INVALID },
+    // The following is NOT implemented in libgcc
+    //{ RTLIB::FPTOUINT_F64_I16,  "__mspabi_fixdu", ISD::SETCC_INVALID },
+    { RTLIB::FPTOUINT_F64_I32,  "__mspabi_fixdul",  ISD::SETCC_INVALID },
+    { RTLIB::FPTOUINT_F64_I64,  "__mspabi_fixdull", ISD::SETCC_INVALID },
+    // The following is NOT implemented in libgcc
+    //{ RTLIB::FPTOSINT_F32_I16,  "__mspabi_fixfi", ISD::SETCC_INVALID },
+    { RTLIB::FPTOSINT_F32_I32,  "__mspabi_fixfli",  ISD::SETCC_INVALID },
+    { RTLIB::FPTOSINT_F32_I64,  "__mspabi_fixflli", ISD::SETCC_INVALID },
+    // The following is NOT implemented in libgcc
+    //{ RTLIB::FPTOUINT_F32_I16,  "__mspabi_fixfu", ISD::SETCC_INVALID },
+    { RTLIB::FPTOUINT_F32_I32,  "__mspabi_fixful",  ISD::SETCC_INVALID },
+    { RTLIB::FPTOUINT_F32_I64,  "__mspabi_fixfull", ISD::SETCC_INVALID },
+    // TODO The following IS implemented in libgcc
+    //{ RTLIB::SINTTOFP_I16_F64,  "__mspabi_fltid", ISD::SETCC_INVALID },
+    { RTLIB::SINTTOFP_I32_F64,  "__mspabi_fltlid",  ISD::SETCC_INVALID },
+    // TODO The following IS implemented in libgcc but is not in the EABI
+    { RTLIB::SINTTOFP_I64_F64,  "__mspabi_fltllid", ISD::SETCC_INVALID },
+    // TODO The following IS implemented in libgcc
+    //{ RTLIB::UINTTOFP_I16_F64,  "__mspabi_fltud", ISD::SETCC_INVALID },
+    { RTLIB::UINTTOFP_I32_F64,  "__mspabi_fltuld",  ISD::SETCC_INVALID },
+    // The following IS implemented in libgcc but is not in the EABI
+    { RTLIB::UINTTOFP_I64_F64,  "__mspabi_fltulld", ISD::SETCC_INVALID },
+    // TODO The following IS implemented in libgcc
+    //{ RTLIB::SINTTOFP_I16_F32,  "__mspabi_fltif", ISD::SETCC_INVALID },
+    { RTLIB::SINTTOFP_I32_F32,  "__mspabi_fltlif",  ISD::SETCC_INVALID },
+    // TODO The following IS implemented in libgcc but is not in the EABI
+    { RTLIB::SINTTOFP_I64_F32,  "__mspabi_fltllif", ISD::SETCC_INVALID },
+    // TODO The following IS implemented in libgcc
+    //{ RTLIB::UINTTOFP_I16_F32,  "__mspabi_fltuf", ISD::SETCC_INVALID },
+    { RTLIB::UINTTOFP_I32_F32,  "__mspabi_fltulf",  ISD::SETCC_INVALID },
+    // The following IS implemented in libgcc but is not in the EABI
+    { RTLIB::UINTTOFP_I64_F32,  "__mspabi_fltullf", ISD::SETCC_INVALID },
+
+    // Floating point comparisons - EABI Table 7
+    { RTLIB::OEQ_F64, "__mspabi_cmpd", ISD::SETEQ },
+    { RTLIB::UNE_F64, "__mspabi_cmpd", ISD::SETNE },
+    { RTLIB::OGE_F64, "__mspabi_cmpd", ISD::SETGE },
+    { RTLIB::OLT_F64, "__mspabi_cmpd", ISD::SETLT },
+    { RTLIB::OLE_F64, "__mspabi_cmpd", ISD::SETLE },
+    { RTLIB::OGT_F64, "__mspabi_cmpd", ISD::SETGT },
+    { RTLIB::OEQ_F32, "__mspabi_cmpf", ISD::SETEQ },
+    { RTLIB::UNE_F32, "__mspabi_cmpf", ISD::SETNE },
+    { RTLIB::OGE_F32, "__mspabi_cmpf", ISD::SETGE },
+    { RTLIB::OLT_F32, "__mspabi_cmpf", ISD::SETLT },
+    { RTLIB::OLE_F32, "__mspabi_cmpf", ISD::SETLE },
+    { RTLIB::OGT_F32, "__mspabi_cmpf", ISD::SETGT },
+
+    // Floating point arithmetic - EABI Table 8
+    { RTLIB::ADD_F64,  "__mspabi_addd", ISD::SETCC_INVALID },
+    { RTLIB::ADD_F32,  "__mspabi_addf", ISD::SETCC_INVALID },
+    { RTLIB::DIV_F64,  "__mspabi_divd", ISD::SETCC_INVALID },
+    { RTLIB::DIV_F32,  "__mspabi_divf", ISD::SETCC_INVALID },
+    { RTLIB::MUL_F64,  "__mspabi_mpyd", ISD::SETCC_INVALID },
+    { RTLIB::MUL_F32,  "__mspabi_mpyf", ISD::SETCC_INVALID },
+    { RTLIB::SUB_F64,  "__mspabi_subd", ISD::SETCC_INVALID },
+    { RTLIB::SUB_F32,  "__mspabi_subf", ISD::SETCC_INVALID },
+    // The following are NOT implemented in libgcc
+    // { RTLIB::NEG_F64,  "__mspabi_negd", ISD::SETCC_INVALID },
+    // { RTLIB::NEG_F32,  "__mspabi_negf", ISD::SETCC_INVALID },
+
+    // Universal Integer Operations - EABI Table 9
+    { RTLIB::SDIV_I16,   "__mspabi_divi", ISD::SETCC_INVALID },
+    { RTLIB::SDIV_I32,   "__mspabi_divli", ISD::SETCC_INVALID },
+    { RTLIB::SDIV_I64,   "__mspabi_divlli", ISD::SETCC_INVALID },
+    { RTLIB::UDIV_I16,   "__mspabi_divu", ISD::SETCC_INVALID },
+    { RTLIB::UDIV_I32,   "__mspabi_divul", ISD::SETCC_INVALID },
+    { RTLIB::UDIV_I64,   "__mspabi_divull", ISD::SETCC_INVALID },
+    { RTLIB::SREM_I16,   "__mspabi_remi", ISD::SETCC_INVALID },
+    { RTLIB::SREM_I32,   "__mspabi_remli", ISD::SETCC_INVALID },
+    { RTLIB::SREM_I64,   "__mspabi_remlli", ISD::SETCC_INVALID },
+    { RTLIB::UREM_I16,   "__mspabi_remu", ISD::SETCC_INVALID },
+    { RTLIB::UREM_I32,   "__mspabi_remul", ISD::SETCC_INVALID },
+    { RTLIB::UREM_I64,   "__mspabi_remull", ISD::SETCC_INVALID },
+
+    // Bitwise Operations - EABI Table 10
+    // TODO: __mspabi_[srli/srai/slli] ARE implemented in libgcc
+    { RTLIB::SRL_I32,    "__mspabi_srll", ISD::SETCC_INVALID },
+    { RTLIB::SRA_I32,    "__mspabi_sral", ISD::SETCC_INVALID },
+    { RTLIB::SHL_I32,    "__mspabi_slll", ISD::SETCC_INVALID },
+    // __mspabi_[srlll/srall/sllll/rlli/rlll] are NOT implemented in libgcc
+
+  };
+
+  for (const auto &LC : LibraryCalls) {
+    setLibcallName(LC.Op, LC.Name);
+    if (LC.Cond != ISD::SETCC_INVALID)
+      setCmpLibcallCC(LC.Op, LC.Cond);
   }
 
+  if (STI.hasHWMult16()) {
+    const struct {
+      const RTLIB::Libcall Op;
+      const char * const Name;
+    } LibraryCalls[] = {
+      // Integer Multiply - EABI Table 9
+      { RTLIB::MUL_I16,   "__mspabi_mpyi_hw" },
+      { RTLIB::MUL_I32,   "__mspabi_mpyl_hw" },
+      { RTLIB::MUL_I64,   "__mspabi_mpyll_hw" },
+      // TODO The __mspabi_mpysl*_hw functions ARE implemented in libgcc
+      // TODO The __mspabi_mpyul*_hw functions ARE implemented in libgcc
+    };
+    for (const auto &LC : LibraryCalls) {
+      setLibcallName(LC.Op, LC.Name);
+    }
+  } else if (STI.hasHWMult32()) {
+    const struct {
+      const RTLIB::Libcall Op;
+      const char * const Name;
+    } LibraryCalls[] = {
+      // Integer Multiply - EABI Table 9
+      { RTLIB::MUL_I16,   "__mspabi_mpyi_hw" },
+      { RTLIB::MUL_I32,   "__mspabi_mpyl_hw32" },
+      { RTLIB::MUL_I64,   "__mspabi_mpyll_hw32" },
+      // TODO The __mspabi_mpysl*_hw32 functions ARE implemented in libgcc
+      // TODO The __mspabi_mpyul*_hw32 functions ARE implemented in libgcc
+    };
+    for (const auto &LC : LibraryCalls) {
+      setLibcallName(LC.Op, LC.Name);
+    }
+  } else if (STI.hasHWMultF5()) {
+    const struct {
+      const RTLIB::Libcall Op;
+      const char * const Name;
+    } LibraryCalls[] = {
+      // Integer Multiply - EABI Table 9
+      { RTLIB::MUL_I16,   "__mspabi_mpyi_f5hw" },
+      { RTLIB::MUL_I32,   "__mspabi_mpyl_f5hw" },
+      { RTLIB::MUL_I64,   "__mspabi_mpyll_f5hw" },
+      // TODO The __mspabi_mpysl*_f5hw functions ARE implemented in libgcc
+      // TODO The __mspabi_mpyul*_f5hw functions ARE implemented in libgcc
+    };
+    for (const auto &LC : LibraryCalls) {
+      setLibcallName(LC.Op, LC.Name);
+    }
+  } else { // NoHWMult
+    const struct {
+      const RTLIB::Libcall Op;
+      const char * const Name;
+    } LibraryCalls[] = {
+      // Integer Multiply - EABI Table 9
+      { RTLIB::MUL_I16,   "__mspabi_mpyi" },
+      { RTLIB::MUL_I32,   "__mspabi_mpyl" },
+      { RTLIB::MUL_I64,   "__mspabi_mpyll" },
+      // The __mspabi_mpysl* functions are NOT implemented in libgcc
+      // The __mspabi_mpyul* functions are NOT implemented in libgcc
+    };
+    for (const auto &LC : LibraryCalls) {
+      setLibcallName(LC.Op, LC.Name);
+    }
+    setLibcallCallingConv(RTLIB::MUL_I64, CallingConv::MSP430_BUILTIN);
+  }
+
+  // Several of the runtime library functions use a special calling conv
+  setLibcallCallingConv(RTLIB::UDIV_I64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::UREM_I64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::SDIV_I64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::SREM_I64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::ADD_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::SUB_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::MUL_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::DIV_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::OEQ_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::UNE_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::OGE_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::OLT_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::OLE_F64, CallingConv::MSP430_BUILTIN);
+  setLibcallCallingConv(RTLIB::OGT_F64, CallingConv::MSP430_BUILTIN);
+  // TODO: __mspabi_srall, __mspabi_srlll, __mspabi_sllll
+
   setMinFunctionAlignment(1);
-  setPrefFunctionAlignment(2);
+  setPrefFunctionAlignment(1);
 }
 
 SDValue MSP430TargetLowering::LowerOperation(SDValue Op,
@@ -246,13 +402,20 @@ MSP430TargetLowering::getRegForInlineAsmConstraint(
 template<typename ArgT>
 static void ParseFunctionArgs(const SmallVectorImpl<ArgT> &Args,
                               SmallVectorImpl<unsigned> &Out) {
-  unsigned CurrentArgIndex = ~0U;
-  for (unsigned i = 0, e = Args.size(); i != e; i++) {
-    if (CurrentArgIndex == Args[i].OrigArgIndex) {
-      Out.back()++;
+  unsigned CurrentArgIndex;
+
+  if (Args.empty())
+    return;
+
+  CurrentArgIndex = Args[0].OrigArgIndex;
+  Out.push_back(0);
+
+  for (auto &Arg : Args) {
+    if (CurrentArgIndex == Arg.OrigArgIndex) {
+      Out.back() += 1;
     } else {
       Out.push_back(1);
-      CurrentArgIndex++;
+      CurrentArgIndex = Arg.OrigArgIndex;
     }
   }
 }
@@ -275,10 +438,27 @@ template<typename ArgT>
 static void AnalyzeArguments(CCState &State,
                              SmallVectorImpl<CCValAssign> &ArgLocs,
                              const SmallVectorImpl<ArgT> &Args) {
-  static const MCPhysReg RegList[] = {
-    MSP430::R15, MSP430::R14, MSP430::R13, MSP430::R12
+  static const MCPhysReg CRegList[] = {
+    MSP430::R12, MSP430::R13, MSP430::R14, MSP430::R15
   };
-  static const unsigned NbRegs = array_lengthof(RegList);
+  static const unsigned CNbRegs = array_lengthof(CRegList);
+  static const MCPhysReg BuiltinRegList[] = {
+    MSP430::R8, MSP430::R9, MSP430::R10, MSP430::R11,
+    MSP430::R12, MSP430::R13, MSP430::R14, MSP430::R15
+  };
+  static const unsigned BuiltinNbRegs = array_lengthof(BuiltinRegList);
+
+  ArrayRef<MCPhysReg> RegList;
+  unsigned NbRegs;
+
+  bool Builtin = (State.getCallingConv() == CallingConv::MSP430_BUILTIN);
+  if (Builtin) {
+    RegList = BuiltinRegList;
+    NbRegs = BuiltinNbRegs;
+  } else {
+    RegList = CRegList;
+    NbRegs = CNbRegs;
+  }
 
   if (State.isVarArg()) {
     AnalyzeVarArgs(State, Args);
@@ -288,8 +468,13 @@ static void AnalyzeArguments(CCState &State,
   SmallVector<unsigned, 4> ArgsParts;
   ParseFunctionArgs(Args, ArgsParts);
 
+  if (Builtin) {
+    assert(ArgsParts.size() == 2 &&
+        "Builtin calling convention requires two arguments");
+  }
+
   unsigned RegsLeft = NbRegs;
-  bool UseStack = false;
+  bool UsedStack = false;
   unsigned ValNo = 0;
 
   for (unsigned i = 0, e = ArgsParts.size(); i != e; i++) {
@@ -317,20 +502,27 @@ static void AnalyzeArguments(CCState &State,
 
     unsigned Parts = ArgsParts[i];
 
-    if (!UseStack && Parts <= RegsLeft) {
-      unsigned FirstVal = ValNo;
+    if (Builtin) {
+      assert(Parts == 4 &&
+          "Builtin calling convention requires 64-bit arguments");
+    }
+
+    if (!UsedStack && Parts == 2 && RegsLeft == 1) {
+      // Special case for 32-bit register split, see EABI section 3.3.3
+      unsigned Reg = State.AllocateReg(RegList);
+      State.addLoc(CCValAssign::getReg(ValNo++, ArgVT, Reg, LocVT, LocInfo));
+      RegsLeft -= 1;
+
+      UsedStack = true;
+      CC_MSP430_AssignStack(ValNo++, ArgVT, LocVT, LocInfo, ArgFlags, State);
+    } else if (Parts <= RegsLeft) {
       for (unsigned j = 0; j < Parts; j++) {
         unsigned Reg = State.AllocateReg(RegList);
         State.addLoc(CCValAssign::getReg(ValNo++, ArgVT, Reg, LocVT, LocInfo));
         RegsLeft--;
       }
-
-      // Reverse the order of the pieces to agree with the "big endian" format
-      // required in the calling convention ABI.
-      SmallVectorImpl<CCValAssign>::iterator B = ArgLocs.begin() + FirstVal;
-      std::reverse(B, B + Parts);
     } else {
-      UseStack = true;
+      UsedStack = true;
       for (unsigned j = 0; j < Parts; j++)
         CC_MSP430_AssignStack(ValNo++, ArgVT, LocVT, LocInfo, ArgFlags, State);
     }
@@ -352,10 +544,6 @@ static void AnalyzeReturnValues(CCState &State,
                                 SmallVectorImpl<CCValAssign> &RVLocs,
                                 const SmallVectorImpl<ArgT> &Args) {
   AnalyzeRetResult(State, Args);
-
-  // Reverse splitted return values to get the "big endian" format required
-  // to agree with the calling convention ABI.
-  std::reverse(RVLocs.begin(), RVLocs.end());
 }
 
 SDValue MSP430TargetLowering::LowerFormalArguments(
@@ -365,7 +553,7 @@ SDValue MSP430TargetLowering::LowerFormalArguments(
 
   switch (CallConv) {
   default:
-    llvm_unreachable("Unsupported calling convention");
+    report_fatal_error("Unsupported calling convention");
   case CallingConv::C:
   case CallingConv::Fast:
     return LowerCCCArguments(Chain, CallConv, isVarArg, Ins, dl, DAG, InVals);
@@ -395,7 +583,8 @@ MSP430TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   switch (CallConv) {
   default:
-    llvm_unreachable("Unsupported calling convention");
+    report_fatal_error("Unsupported calling convention");
+  case CallingConv::MSP430_BUILTIN:
   case CallingConv::Fast:
   case CallingConv::C:
     return LowerCCCCallTo(Chain, Callee, CallConv, isVarArg, isTailCall,
@@ -413,7 +602,7 @@ SDValue MSP430TargetLowering::LowerCCCArguments(
     const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &dl,
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
-  MachineFrameInfo *MFI = MF.getFrameInfo();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
   MachineRegisterInfo &RegInfo = MF.getRegInfo();
   MSP430MachineFunctionInfo *FuncInfo = MF.getInfo<MSP430MachineFunctionInfo>();
 
@@ -426,7 +615,7 @@ SDValue MSP430TargetLowering::LowerCCCArguments(
   // Create frame index for the start of the first vararg value
   if (isVarArg) {
     unsigned Offset = CCInfo.getNextStackOffset();
-    FuncInfo->setVarArgsFrameIndex(MFI->CreateFixedObject(1, Offset, true));
+    FuncInfo->setVarArgsFrameIndex(MFI.CreateFixedObject(1, Offset, true));
   }
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
@@ -471,8 +660,8 @@ SDValue MSP430TargetLowering::LowerCCCArguments(
       ISD::ArgFlagsTy Flags = Ins[i].Flags;
 
       if (Flags.isByVal()) {
-        int FI = MFI->CreateFixedObject(Flags.getByValSize(),
-                                        VA.getLocMemOffset(), true);
+        int FI = MFI.CreateFixedObject(Flags.getByValSize(),
+                                       VA.getLocMemOffset(), true);
         InVal = DAG.getFrameIndex(FI, getPointerTy(DAG.getDataLayout()));
       } else {
         // Load the argument to a virtual register
@@ -483,7 +672,7 @@ SDValue MSP430TargetLowering::LowerCCCArguments(
                 << "\n";
         }
         // Create the frame index object for this incoming parameter...
-        int FI = MFI->CreateFixedObject(ObjSize, VA.getLocMemOffset(), true);
+        int FI = MFI.CreateFixedObject(ObjSize, VA.getLocMemOffset(), true);
 
         // Create the SelectionDAG nodes corresponding to a load
         //from this parameter
@@ -497,7 +686,31 @@ SDValue MSP430TargetLowering::LowerCCCArguments(
     }
   }
 
+  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
+    if (Ins[i].Flags.isSRet()) {
+      unsigned Reg = FuncInfo->getSRetReturnReg();
+      if (!Reg) {
+        Reg = MF.getRegInfo().createVirtualRegister(
+            getRegClassFor(MVT::i16));
+        FuncInfo->setSRetReturnReg(Reg);
+      }
+      SDValue Copy = DAG.getCopyToReg(DAG.getEntryNode(), dl, Reg, InVals[i]);
+      Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, Copy, Chain);
+    }
+  }
+
   return Chain;
+}
+
+bool
+MSP430TargetLowering::CanLowerReturn(CallingConv::ID CallConv,
+                                     MachineFunction &MF,
+                                     bool IsVarArg,
+                                     const SmallVectorImpl<ISD::OutputArg> &Outs,
+                                     LLVMContext &Context) const {
+  SmallVector<CCValAssign, 16> RVLocs;
+  CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
+  return CCInfo.CheckReturn(Outs, RetCC_MSP430);
 }
 
 SDValue
@@ -506,6 +719,8 @@ MSP430TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                                   const SmallVectorImpl<ISD::OutputArg> &Outs,
                                   const SmallVectorImpl<SDValue> &OutVals,
                                   const SDLoc &dl, SelectionDAG &DAG) const {
+
+  MachineFunction &MF = DAG.getMachineFunction();
 
   // CCValAssign - represent the assignment of the return value to a location
   SmallVector<CCValAssign, 16> RVLocs;
@@ -538,6 +753,22 @@ MSP430TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
+  if (MF.getFunction().hasStructRetAttr()) {
+    MSP430MachineFunctionInfo *FuncInfo = MF.getInfo<MSP430MachineFunctionInfo>();
+    unsigned Reg = FuncInfo->getSRetReturnReg();
+
+    if (!Reg)
+      llvm_unreachable("sret virtual register not created in entry block");
+
+    SDValue Val =
+      DAG.getCopyFromReg(Chain, dl, Reg, getPointerTy(DAG.getDataLayout()));
+    unsigned R12 = MSP430::R12;
+
+    Chain = DAG.getCopyToReg(Chain, dl, R12, Val, Flag);
+    Flag = Chain.getValue(1);
+    RetOps.push_back(DAG.getRegister(R12, getPointerTy(DAG.getDataLayout())));
+  }
+
   unsigned Opc = (CallConv == CallingConv::MSP430_INTR ?
                   MSP430ISD::RETI_FLAG : MSP430ISD::RET_FLAG);
 
@@ -552,7 +783,6 @@ MSP430TargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
 /// LowerCCCCallTo - functions arguments are copied from virtual regs to
 /// (physical regs)/(stack frame), CALLSEQ_START and CALLSEQ_END are emitted.
-// TODO: sret.
 SDValue MSP430TargetLowering::LowerCCCCallTo(
     SDValue Chain, SDValue Callee, CallingConv::ID CallConv, bool isVarArg,
     bool isTailCall, const SmallVectorImpl<ISD::OutputArg> &Outs,
@@ -569,8 +799,7 @@ SDValue MSP430TargetLowering::LowerCCCCallTo(
   unsigned NumBytes = CCInfo.getNextStackOffset();
   auto PtrVT = getPointerTy(DAG.getDataLayout());
 
-  Chain = DAG.getCALLSEQ_START(Chain,
-                               DAG.getConstant(NumBytes, dl, PtrVT, true), dl);
+  Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
 
   SmallVector<std::pair<unsigned, SDValue>, 4> RegsToPass;
   SmallVector<SDValue, 12> MemOpChains;
@@ -718,30 +947,40 @@ SDValue MSP430TargetLowering::LowerShifts(SDValue Op,
 
   // Expand non-constant shifts to loops:
   if (!isa<ConstantSDNode>(N->getOperand(1)))
-    switch (Opc) {
-    default: llvm_unreachable("Invalid shift opcode!");
-    case ISD::SHL:
-      return DAG.getNode(MSP430ISD::SHL, dl,
-                         VT, N->getOperand(0), N->getOperand(1));
-    case ISD::SRA:
-      return DAG.getNode(MSP430ISD::SRA, dl,
-                         VT, N->getOperand(0), N->getOperand(1));
-    case ISD::SRL:
-      return DAG.getNode(MSP430ISD::SRL, dl,
-                         VT, N->getOperand(0), N->getOperand(1));
-    }
+    return Op;
 
   uint64_t ShiftAmount = cast<ConstantSDNode>(N->getOperand(1))->getZExtValue();
 
   // Expand the stuff into sequence of shifts.
-  // FIXME: for some shift amounts this might be done better!
-  // E.g.: foo >> (8 + N) => sxt(swpb(foo)) >> N
   SDValue Victim = N->getOperand(0);
+
+  if (ShiftAmount >= 8) {
+    assert(VT == MVT::i16 && "Can not shift i8 by 8 and more");
+    switch(Opc) {
+    default:
+      llvm_unreachable("Unknown shift");
+    case ISD::SHL:
+      // foo << (8 + N) => swpb(zext(foo)) << N
+      Victim = DAG.getZeroExtendInReg(Victim, dl, MVT::i8);
+      Victim = DAG.getNode(ISD::BSWAP, dl, VT, Victim);
+      break;
+    case ISD::SRA:
+    case ISD::SRL:
+      // foo >> (8 + N) => sxt(swpb(foo)) >> N
+      Victim = DAG.getNode(ISD::BSWAP, dl, VT, Victim);
+      Victim = (Opc == ISD::SRA)
+                   ? DAG.getNode(ISD::SIGN_EXTEND_INREG, dl, VT, Victim,
+                                 DAG.getValueType(MVT::i8))
+                   : DAG.getZeroExtendInReg(Victim, dl, MVT::i8);
+      break;
+    }
+    ShiftAmount -= 8;
+  }
 
   if (Opc == ISD::SRL && ShiftAmount) {
     // Emit a special goodness here:
     // srl A, 1 => clrc; rrc A
-    Victim = DAG.getNode(MSP430ISD::RRC, dl, VT, Victim);
+    Victim = DAG.getNode(MSP430ISD::RRCL, dl, VT, Victim);
     ShiftAmount -= 1;
   }
 
@@ -807,7 +1046,8 @@ static SDValue EmitCMP(SDValue &LHS, SDValue &RHS, SDValue &TargetCC,
       std::swap(LHS, RHS);
     break;
   case ISD::SETULE:
-    std::swap(LHS, RHS);        // FALLTHROUGH
+    std::swap(LHS, RHS);
+    LLVM_FALLTHROUGH;
   case ISD::SETUGE:
     // Turn lhs u>= rhs with lhs constant into rhs u< lhs+1, this allows us to
     // fold constant into instruction.
@@ -820,7 +1060,8 @@ static SDValue EmitCMP(SDValue &LHS, SDValue &RHS, SDValue &TargetCC,
     TCC = MSP430CC::COND_HS;    // aka COND_C
     break;
   case ISD::SETUGT:
-    std::swap(LHS, RHS);        // FALLTHROUGH
+    std::swap(LHS, RHS);
+    LLVM_FALLTHROUGH;
   case ISD::SETULT:
     // Turn lhs u< rhs with lhs constant into rhs u>= lhs+1, this allows us to
     // fold constant into instruction.
@@ -833,7 +1074,8 @@ static SDValue EmitCMP(SDValue &LHS, SDValue &RHS, SDValue &TargetCC,
     TCC = MSP430CC::COND_LO;    // aka COND_NC
     break;
   case ISD::SETLE:
-    std::swap(LHS, RHS);        // FALLTHROUGH
+    std::swap(LHS, RHS);
+    LLVM_FALLTHROUGH;
   case ISD::SETGE:
     // Turn lhs >= rhs with lhs constant into rhs < lhs+1, this allows us to
     // fold constant into instruction.
@@ -846,7 +1088,8 @@ static SDValue EmitCMP(SDValue &LHS, SDValue &RHS, SDValue &TargetCC,
     TCC = MSP430CC::COND_GE;
     break;
   case ISD::SETGT:
-    std::swap(LHS, RHS);        // FALLTHROUGH
+    std::swap(LHS, RHS);
+    LLVM_FALLTHROUGH;
   case ISD::SETLT:
     // Turn lhs < rhs with lhs constant into rhs >= lhs+1, this allows us to
     // fold constant into instruction.
@@ -997,7 +1240,7 @@ MSP430TargetLowering::getReturnAddressFrameIndex(SelectionDAG &DAG) const {
   if (ReturnAddrIndex == 0) {
     // Set up a frame object for the return address.
     uint64_t SlotSize = MF.getDataLayout().getPointerSize();
-    ReturnAddrIndex = MF.getFrameInfo()->CreateFixedObject(SlotSize, -SlotSize,
+    ReturnAddrIndex = MF.getFrameInfo().CreateFixedObject(SlotSize, -SlotSize,
                                                            true);
     FuncInfo->setRAIndex(ReturnAddrIndex);
   }
@@ -1007,8 +1250,8 @@ MSP430TargetLowering::getReturnAddressFrameIndex(SelectionDAG &DAG) const {
 
 SDValue MSP430TargetLowering::LowerRETURNADDR(SDValue Op,
                                               SelectionDAG &DAG) const {
-  MachineFrameInfo *MFI = DAG.getMachineFunction().getFrameInfo();
-  MFI->setReturnAddressIsTaken(true);
+  MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
+  MFI.setReturnAddressIsTaken(true);
 
   if (verifyReturnAddressArgumentIsConstant(Op, DAG))
     return SDValue();
@@ -1034,8 +1277,8 @@ SDValue MSP430TargetLowering::LowerRETURNADDR(SDValue Op,
 
 SDValue MSP430TargetLowering::LowerFRAMEADDR(SDValue Op,
                                              SelectionDAG &DAG) const {
-  MachineFrameInfo *MFI = DAG.getMachineFunction().getFrameInfo();
-  MFI->setFrameAddressIsTaken(true);
+  MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
+  MFI.setFrameAddressIsTaken(true);
 
   EVT VT = Op.getValueType();
   SDLoc dl(Op);  // FIXME probably not meaningful
@@ -1116,15 +1359,14 @@ const char *MSP430TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MSP430ISD::RRA:                return "MSP430ISD::RRA";
   case MSP430ISD::RLA:                return "MSP430ISD::RLA";
   case MSP430ISD::RRC:                return "MSP430ISD::RRC";
+  case MSP430ISD::RRCL:               return "MSP430ISD::RRCL";
   case MSP430ISD::CALL:               return "MSP430ISD::CALL";
   case MSP430ISD::Wrapper:            return "MSP430ISD::Wrapper";
   case MSP430ISD::BR_CC:              return "MSP430ISD::BR_CC";
   case MSP430ISD::CMP:                return "MSP430ISD::CMP";
   case MSP430ISD::SETCC:              return "MSP430ISD::SETCC";
   case MSP430ISD::SELECT_CC:          return "MSP430ISD::SELECT_CC";
-  case MSP430ISD::SHL:                return "MSP430ISD::SHL";
-  case MSP430ISD::SRA:                return "MSP430ISD::SRA";
-  case MSP430ISD::SRL:                return "MSP430ISD::SRL";
+  case MSP430ISD::DADD:               return "MSP430ISD::DADD";
   }
   return nullptr;
 }
@@ -1171,33 +1413,49 @@ MSP430TargetLowering::EmitShiftInstr(MachineInstr &MI,
   const TargetInstrInfo &TII = *F->getSubtarget().getInstrInfo();
 
   unsigned Opc;
+  bool ClearCarry = false;
   const TargetRegisterClass * RC;
   switch (MI.getOpcode()) {
   default: llvm_unreachable("Invalid shift opcode!");
   case MSP430::Shl8:
-   Opc = MSP430::SHL8r1;
-   RC = &MSP430::GR8RegClass;
-   break;
+    Opc = MSP430::ADD8rr;
+    RC = &MSP430::GR8RegClass;
+    break;
   case MSP430::Shl16:
-   Opc = MSP430::SHL16r1;
-   RC = &MSP430::GR16RegClass;
-   break;
+    Opc = MSP430::ADD16rr;
+    RC = &MSP430::GR16RegClass;
+    break;
   case MSP430::Sra8:
-   Opc = MSP430::SAR8r1;
-   RC = &MSP430::GR8RegClass;
-   break;
+    Opc = MSP430::RRA8r;
+    RC = &MSP430::GR8RegClass;
+    break;
   case MSP430::Sra16:
-   Opc = MSP430::SAR16r1;
-   RC = &MSP430::GR16RegClass;
-   break;
+    Opc = MSP430::RRA16r;
+    RC = &MSP430::GR16RegClass;
+    break;
   case MSP430::Srl8:
-   Opc = MSP430::SAR8r1c;
-   RC = &MSP430::GR8RegClass;
-   break;
+    ClearCarry = true;
+    Opc = MSP430::RRC8r;
+    RC = &MSP430::GR8RegClass;
+    break;
   case MSP430::Srl16:
-   Opc = MSP430::SAR16r1c;
-   RC = &MSP430::GR16RegClass;
-   break;
+    ClearCarry = true;
+    Opc = MSP430::RRC16r;
+    RC = &MSP430::GR16RegClass;
+    break;
+  case MSP430::Rrcl8:
+  case MSP430::Rrcl16: {
+    BuildMI(*BB, MI, dl, TII.get(MSP430::BIC16rc), MSP430::SR)
+      .addReg(MSP430::SR).addImm(1);
+    unsigned SrcReg = MI.getOperand(1).getReg();
+    unsigned DstReg = MI.getOperand(0).getReg();
+    unsigned RrcOpc = MI.getOpcode() == MSP430::Rrcl16
+                    ? MSP430::RRC16r : MSP430::RRC8r;
+    BuildMI(*BB, MI, dl, TII.get(RrcOpc), DstReg)
+      .addReg(SrcReg);
+    MI.eraseFromParent(); // The pseudo instruction is gone now.
+    return BB;
+  }
   }
 
   const BasicBlock *LLVM_BB = BB->getBasicBlock();
@@ -1216,7 +1474,7 @@ MSP430TargetLowering::EmitShiftInstr(MachineInstr &MI,
                 BB->end());
   RemBB->transferSuccessorsAndUpdatePHIs(BB);
 
-  // Add adges BB => LoopBB => RemBB, BB => RemBB, LoopBB => LoopBB
+  // Add edges BB => LoopBB => RemBB, BB => RemBB, LoopBB => LoopBB
   BB->addSuccessor(LoopBB);
   BB->addSuccessor(RemBB);
   LoopBB->addSuccessor(RemBB);
@@ -1250,8 +1508,16 @@ MSP430TargetLowering::EmitShiftInstr(MachineInstr &MI,
   BuildMI(LoopBB, dl, TII.get(MSP430::PHI), ShiftAmtReg)
     .addReg(ShiftAmtSrcReg).addMBB(BB)
     .addReg(ShiftAmtReg2).addMBB(LoopBB);
-  BuildMI(LoopBB, dl, TII.get(Opc), ShiftReg2)
-    .addReg(ShiftReg);
+  if (ClearCarry)
+    BuildMI(LoopBB, dl, TII.get(MSP430::BIC16rc), MSP430::SR)
+      .addReg(MSP430::SR).addImm(1);
+  if (Opc == MSP430::ADD8rr || Opc == MSP430::ADD16rr)
+    BuildMI(LoopBB, dl, TII.get(Opc), ShiftReg2)
+      .addReg(ShiftReg)
+      .addReg(ShiftReg);
+  else
+    BuildMI(LoopBB, dl, TII.get(Opc), ShiftReg2)
+      .addReg(ShiftReg);
   BuildMI(LoopBB, dl, TII.get(MSP430::SUB8ri), ShiftAmtReg2)
     .addReg(ShiftAmtReg).addImm(1);
   BuildMI(LoopBB, dl, TII.get(MSP430::JCC))
@@ -1273,9 +1539,10 @@ MSP430TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                   MachineBasicBlock *BB) const {
   unsigned Opc = MI.getOpcode();
 
-  if (Opc == MSP430::Shl8 || Opc == MSP430::Shl16 ||
-      Opc == MSP430::Sra8 || Opc == MSP430::Sra16 ||
-      Opc == MSP430::Srl8 || Opc == MSP430::Srl16)
+  if (Opc == MSP430::Shl8  || Opc == MSP430::Shl16 ||
+      Opc == MSP430::Sra8  || Opc == MSP430::Sra16 ||
+      Opc == MSP430::Srl8  || Opc == MSP430::Srl16 ||
+      Opc == MSP430::Rrcl8 || Opc == MSP430::Rrcl16)
     return EmitShiftInstr(MI, BB);
 
   const TargetInstrInfo &TII = *BB->getParent()->getSubtarget().getInstrInfo();

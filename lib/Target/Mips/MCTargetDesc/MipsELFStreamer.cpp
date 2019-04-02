@@ -8,15 +8,34 @@
 //===----------------------------------------------------------------------===//
 
 #include "MipsELFStreamer.h"
+#include "MipsOptionRecord.h"
 #include "MipsTargetStreamer.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAssembler.h"
+#include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/Support/ELF.h"
+#include "llvm/Support/Casting.h"
 
 using namespace llvm;
 
+MipsELFStreamer::MipsELFStreamer(MCContext &Context,
+                                 std::unique_ptr<MCAsmBackend> MAB,
+                                 std::unique_ptr<MCObjectWriter> OW,
+                                 std::unique_ptr<MCCodeEmitter> Emitter)
+    : MCELFStreamer(Context, std::move(MAB), std::move(OW),
+                    std::move(Emitter)) {
+  RegInfoRecord = new MipsRegInfoRecord(this, Context);
+  MipsOptionRecords.push_back(
+      std::unique_ptr<MipsRegInfoRecord>(RegInfoRecord));
+}
+
 void MipsELFStreamer::EmitInstruction(const MCInst &Inst,
-                                      const MCSubtargetInfo &STI) {
+                                      const MCSubtargetInfo &STI, bool) {
   MCELFStreamer::EmitInstruction(Inst, STI);
 
   MCContext &Context = getContext();
@@ -35,6 +54,22 @@ void MipsELFStreamer::EmitInstruction(const MCInst &Inst,
   createPendingLabelRelocs();
 }
 
+void MipsELFStreamer::EmitCFIStartProcImpl(MCDwarfFrameInfo &Frame) {
+  Frame.Begin = getContext().createTempSymbol();
+  MCELFStreamer::EmitLabel(Frame.Begin);
+}
+
+MCSymbol *MipsELFStreamer::EmitCFILabel() {
+  MCSymbol *Label = getContext().createTempSymbol("cfi", true);
+  MCELFStreamer::EmitLabel(Label);
+  return Label;
+}
+
+void MipsELFStreamer::EmitCFIEndProcImpl(MCDwarfFrameInfo &Frame) {
+  Frame.End = getContext().createTempSymbol();
+  MCELFStreamer::EmitLabel(Frame.End);
+}
+
 void MipsELFStreamer::createPendingLabelRelocs() {
   MipsTargetELFStreamer *ELFTargetStreamer =
       static_cast<MipsTargetELFStreamer *>(getTargetStreamer());
@@ -51,7 +86,7 @@ void MipsELFStreamer::createPendingLabelRelocs() {
   Labels.clear();
 }
 
-void MipsELFStreamer::EmitLabel(MCSymbol *Symbol) {
+void MipsELFStreamer::EmitLabel(MCSymbol *Symbol, SMLoc Loc) {
   MCELFStreamer::EmitLabel(Symbol);
   Labels.push_back(Symbol);
 }
@@ -68,15 +103,20 @@ void MipsELFStreamer::EmitValueImpl(const MCExpr *Value, unsigned Size,
   Labels.clear();
 }
 
+void MipsELFStreamer::EmitIntValue(uint64_t Value, unsigned Size) {
+  MCELFStreamer::EmitIntValue(Value, Size);
+  Labels.clear();
+}
+
 void MipsELFStreamer::EmitMipsOptionRecords() {
   for (const auto &I : MipsOptionRecords)
     I->EmitMipsOptionRecord();
 }
 
-MCELFStreamer *llvm::createMipsELFStreamer(MCContext &Context,
-                                           MCAsmBackend &MAB,
-                                           raw_pwrite_stream &OS,
-                                           MCCodeEmitter *Emitter,
-                                           bool RelaxAll) {
-  return new MipsELFStreamer(Context, MAB, OS, Emitter);
+MCELFStreamer *llvm::createMipsELFStreamer(
+    MCContext &Context, std::unique_ptr<MCAsmBackend> MAB,
+    std::unique_ptr<MCObjectWriter> OW, std::unique_ptr<MCCodeEmitter> Emitter,
+    bool RelaxAll) {
+  return new MipsELFStreamer(Context, std::move(MAB), std::move(OW),
+                             std::move(Emitter));
 }

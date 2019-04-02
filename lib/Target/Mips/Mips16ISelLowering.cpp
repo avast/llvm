@@ -17,8 +17,8 @@
 #include "MipsRegisterInfo.h"
 #include "MipsTargetMachine.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -386,27 +386,22 @@ const char* Mips16TargetLowering::
   }
   else if (RetTy ->isDoubleTy()) {
     result = dfMips16Helper[stubNum];
-  }
-  else if (RetTy->isStructTy()) {
+  } else if (StructType *SRetTy = dyn_cast<StructType>(RetTy)) {
     // check if it's complex
-    if (RetTy->getNumContainedTypes() == 2) {
-      if ((RetTy->getContainedType(0)->isFloatTy()) &&
-          (RetTy->getContainedType(1)->isFloatTy())) {
+    if (SRetTy->getNumElements() == 2) {
+      if ((SRetTy->getElementType(0)->isFloatTy()) &&
+          (SRetTy->getElementType(1)->isFloatTy())) {
         result = scMips16Helper[stubNum];
-      }
-      else if ((RetTy->getContainedType(0)->isDoubleTy()) &&
-               (RetTy->getContainedType(1)->isDoubleTy())) {
+      } else if ((SRetTy->getElementType(0)->isDoubleTy()) &&
+                 (SRetTy->getElementType(1)->isDoubleTy())) {
         result = dcMips16Helper[stubNum];
-      }
-      else {
+      } else {
         llvm_unreachable("Uncovered condition");
       }
-    }
-    else {
+    } else {
       llvm_unreachable("Uncovered condition");
     }
-  }
-  else {
+  } else {
     if (stubNum == 0) {
       needHelper = false;
       return "";

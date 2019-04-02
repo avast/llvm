@@ -44,6 +44,12 @@ type llbasicblock
     class. *)
 type llbuilder
 
+(** Used to represent attribute kinds. *)
+type llattrkind
+
+(** An attribute in LLVM IR. See the [llvm::Attribute] class. *)
+type llattribute
+
 (** Used to efficiently handle large buffers of read-only binary data.
     See the [llvm::MemoryBuffer] class. *)
 type llmemorybuffer
@@ -71,6 +77,7 @@ module TypeKind : sig
   | Vector
   | Metadata
   | X86_mmx
+  | Token
 end
 
 (** The linkage of a global value, accessed with {!linkage} and
@@ -130,36 +137,19 @@ module CallConv : sig
                               convention from C. *)
 end
 
-(** The attribute kind of a function parameter, result or the function itself.
-    See [llvm::Attribute::AttrKind]. *)
-module Attribute : sig
+(** The logical representation of an attribute. *)
+module AttrRepr : sig
   type t =
-  | Zext
-  | Sext
-  | Noreturn
-  | Inreg
-  | Structret
-  | Nounwind
-  | Noalias
-  | Byval
-  | Nest
-  | Readnone
-  | Readonly
-  | Noinline
-  | Alwaysinline
-  | Optsize
-  | Ssp
-  | Sspreq
-  | Alignment of int
-  | Nocapture
-  | Noredzone
-  | Noimplicitfloat
-  | Naked
-  | Inlinehint
-  | Stackalignment of int
-  | ReturnsTwice
-  | UWTable
-  | NonLazyBind
+  | Enum of llattrkind * int64
+  | String of string * string
+end
+
+(** The position of an attribute. See [LLVMAttributeIndex]. *)
+module AttrIndex : sig
+  type t =
+  | Function
+  | Return
+  | Param of int
 end
 
 (** The predicate for an integer comparison ([icmp]) instruction.
@@ -271,6 +261,12 @@ module Opcode : sig
   | AtomicRMW
   | Resume
   | LandingPad
+  | AddrSpaceCast
+  | CleanupRet
+  | CatchRet
+  | CatchPad
+  | CleanupPad
+  | CatchSwitch
 end
 
 (** The type of a clause of a [landingpad] instruction.
@@ -347,6 +343,7 @@ module ValueKind : sig
   | ConstantVector
   | Function
   | GlobalAlias
+  | GlobalIFunc
   | GlobalVariable
   | UndefValue
   | Instruction of Opcode.t
@@ -381,6 +378,8 @@ type ('a, 'b) llrev_pos =
 
 
 (** {6 Exceptions} *)
+
+exception FeatureDisabled of string
 
 exception IoError of string
 
@@ -441,6 +440,36 @@ val global_context : unit -> llcontext
     name [name] in the context [context].  See the function
     [llvm::LLVMContext::getMDKindID]. *)
 val mdkind_id : llcontext -> string -> llmdkind
+
+
+(** {6 Attributes} *)
+
+(** [UnknownAttribute attr] is raised when a enum attribute name [name]
+    is not recognized by LLVM. *)
+exception UnknownAttribute of string
+
+(** [enum_attr_kind name] returns the kind of enum attributes named [name].
+    May raise [UnknownAttribute]. *)
+val enum_attr_kind : string -> llattrkind
+
+(** [create_enum_attr context value kind] creates an enum attribute
+    with the supplied [kind] and [value] in [context]; if the value
+    is not required (as for the majority of attributes), use [0L].
+    May raise [UnknownAttribute].
+    See the constructor [llvm::Attribute::get]. *)
+val create_enum_attr : llcontext -> string -> int64 -> llattribute
+
+(** [create_string_attr context kind value] creates a string attribute
+    with the supplied [kind] and [value] in [context].
+    See the constructor [llvm::Attribute::get]. *)
+val create_string_attr : llcontext -> string -> string -> llattribute
+
+(** [attr_of_repr context repr] creates an attribute with the supplied
+    representation [repr] in [context]. *)
+val attr_of_repr : llcontext -> AttrRepr.t -> llattribute
+
+(** [repr_of_attr attr] describes the representation of attribute [attr]. *)
+val repr_of_attr : llattribute -> AttrRepr.t
 
 
 (** {6 Modules} *)
@@ -636,8 +665,15 @@ val is_packed : lltype -> bool
     [false] otherwise. See the method [llvm::StructType::isOpaque]. *)
 val is_opaque : lltype -> bool
 
+(** [is_literal sty] returns [true] if the structure type [sty] is literal.
+    [false] otherwise. See the method [llvm::StructType::isLiteral]. *)
+val is_literal : lltype -> bool
+
 
 (** {7 Operations on pointer, vector, and array types} *)
+
+(** [subtypes ty] returns [ty]'s subtypes *)
+val subtypes : lltype -> lltype array
 
 (** [array_type ty n] returns the array type containing [n] elements of type
     [ty]. See the method [llvm::ArrayType::get]. *)
@@ -777,6 +813,11 @@ val set_operand : llvalue -> int -> llvalue -> unit
     See the method [llvm::User::getNumOperands]. *)
 val num_operands : llvalue -> int
 
+
+(** [indices i] returns the indices for the ExtractValue or InsertValue
+    instruction [i].
+    See the [llvm::getIndices] methods. *)
+val indices : llvalue -> int array
 
 (** {7 Operations on constants of (mostly) any type} *)
 
@@ -1547,21 +1588,21 @@ val gc : llvalue -> string option
     [gc]. See the method [llvm::Function::setGC]. *)
 val set_gc : string option -> llvalue -> unit
 
-(** [add_function_attr f a] adds attribute [a] to the return type of function
-    [f]. *)
-val add_function_attr : llvalue -> Attribute.t -> unit
+(** [add_function_attr f a i] adds attribute [a] to the function [f]
+    at position [i]. *)
+val add_function_attr : llvalue -> llattribute -> AttrIndex.t -> unit
 
-(** [add_target_dependent_function_attr f a] adds target-dependent attribute
-    [a] to function [f]. *)
-val add_target_dependent_function_attr : llvalue -> string -> string -> unit
+(** [function_attrs f i] returns the attributes for the function [f]
+    at position [i]. *)
+val function_attrs : llvalue -> AttrIndex.t -> llattribute array
 
-(** [function_attr f] returns the function attribute for the function [f].
-    See the method [llvm::Function::getAttributes] *)
-val function_attr : llvalue -> Attribute.t list
+(** [remove_enum_function_attr f k i] removes enum attribute with kind [k]
+    from the function [f] at position [i]. *)
+val remove_enum_function_attr : llvalue -> llattrkind -> AttrIndex.t -> unit
 
-(** [remove_function_attr f a] removes attribute [a] from the return type of
-    function [f]. *)
-val remove_function_attr : llvalue -> Attribute.t -> unit
+(** [remove_string_function_attr f k i] removes string attribute with kind [k]
+    from the function [f] at position [i]. *)
+val remove_string_function_attr : llvalue -> string -> AttrIndex.t -> unit
 
 
 (** {7 Operations on params} *)
@@ -1573,11 +1614,6 @@ val params : llvalue -> llvalue array
 (** [param f n] returns the [n]th parameter of function [f].
     See the method [llvm::Function::getArgumentList]. *)
 val param : llvalue -> int -> llvalue
-
-(** [param_attr p] returns the attributes of parameter [p].
-    See the methods [llvm::Function::getAttributes] and
-    [llvm::Attributes::getParamAttributes] *)
-val param_attr : llvalue -> Attribute.t list
 
 (** [param_parent p] returns the parent function that owns the parameter.
     See the method [llvm::Argument::getParent]. *)
@@ -1619,15 +1655,6 @@ val rev_iter_params : (llvalue -> unit) -> llvalue -> unit
 (** [fold_right_params f fn init] is [f (... (f init bN) ...) b1] where
     [b1,...,bN] are the parameters of function [fn]. Tail recursive. *)
 val fold_right_params : (llvalue -> 'a -> 'a) -> llvalue -> 'a -> 'a
-
-(** [add_param p a] adds attribute [a] to parameter [p]. *)
-val add_param_attr : llvalue -> Attribute.t -> unit
-
-(** [remove_param_attr p a] removes attribute [a] from parameter [p]. *)
-val remove_param_attr : llvalue -> Attribute.t -> unit
-
-(** [set_param_alignment p a] set the alignment of parameter [p] to [a]. *)
-val set_param_alignment : llvalue -> int -> unit
 
 
 (** {7 Operations on basic blocks} *)
@@ -1797,18 +1824,29 @@ val instruction_call_conv: llvalue -> int
     and [llvm::InvokeInst::setCallingConv]. *)
 val set_instruction_call_conv: int -> llvalue -> unit
 
-(** [add_instruction_param_attr ci i a] adds attribute [a] to the [i]th
-    parameter of the call or invoke instruction [ci]. [i]=0 denotes the return
-    value. *)
-val add_instruction_param_attr : llvalue -> int -> Attribute.t -> unit
+(** [add_call_site_attr f a i] adds attribute [a] to the call instruction [ci]
+    at position [i]. *)
+val add_call_site_attr : llvalue -> llattribute -> AttrIndex.t -> unit
 
-(** [remove_instruction_param_attr ci i a] removes attribute [a] from the
-    [i]th parameter of the call or invoke instruction [ci]. [i]=0 denotes the
-    return value. *)
-val remove_instruction_param_attr : llvalue -> int -> Attribute.t -> unit
+(** [call_site_attr f i] returns the attributes for the call instruction [ci]
+    at position [i]. *)
+val call_site_attrs : llvalue -> AttrIndex.t -> llattribute array
+
+(** [remove_enum_call_site_attr f k i] removes enum attribute with kind [k]
+    from the call instruction [ci] at position [i]. *)
+val remove_enum_call_site_attr : llvalue -> llattrkind -> AttrIndex.t -> unit
+
+(** [remove_string_call_site_attr f k i] removes string attribute with kind [k]
+    from the call instruction [ci] at position [i]. *)
+val remove_string_call_site_attr : llvalue -> string -> AttrIndex.t -> unit
 
 
-(** {7 Operations on call instructions (only)} *)
+(** {7 Operations on call and invoke instructions (only)} *)
+
+(** [num_arg_operands ci] returns the number of arguments for the call or
+    invoke instruction [ci].  See the method
+    [llvm::CallInst::getNumArgOperands]. *)
+val num_arg_operands : llvalue -> int
 
 (** [is_tail_call ci] is [true] if the call instruction [ci] is flagged as
     eligible for tail call optimization, [false] otherwise.
@@ -1819,6 +1857,14 @@ val is_tail_call : llvalue -> bool
     call optimization if [tc] is [true], clears otherwise.
     See the method [llvm::CallInst::setTailCall]. *)
 val set_tail_call : bool -> llvalue -> unit
+
+(** [get_normal_dest ii] is the normal destination basic block of an invoke
+    instruction. See the method [llvm::InvokeInst::getNormalDest()]. *)
+val get_normal_dest : llvalue -> llbasicblock
+
+(** [get_unwind_dest ii] is the unwind destination basic block of an invoke
+    instruction. See the method [llvm::InvokeInst::getUnwindDest()]. *)
+val get_unwind_dest : llvalue -> llbasicblock
 
 
 (** {7 Operations on load/store instructions (only)} *)
@@ -1841,16 +1887,16 @@ val set_volatile : bool -> llvalue -> unit
 val is_terminator : llvalue -> bool
 
 (** [successor v i] returns the successor at index [i] for the value [v].
-    See the method [llvm::TerminatorInst::getSuccessor]. *)
+    See the method [llvm::Instruction::getSuccessor]. *)
 val successor : llvalue -> int -> llbasicblock
 
 (** [set_successor v i o] sets the successor of the value [v] at the index [i] to
     the value [o].
-    See the method [llvm::TerminatorInst::setSuccessor]. *)
+    See the method [llvm::Instruction::setSuccessor]. *)
 val set_successor : llvalue -> int -> llbasicblock -> unit
 
 (** [num_successors v] returns the number of successors for the value [v].
-    See the method [llvm::TerminatorInst::getNumSuccessors]. *)
+    See the method [llvm::Instruction::getNumSuccessors]. *)
 val num_successors : llvalue -> int
 
 (** [successors v] returns the successors of [v]. *)
@@ -2051,6 +2097,10 @@ val build_invoke : llvalue -> llvalue array -> llbasicblock ->
     See the method [llvm::LLVMBuilder::CreateLandingPad]. *)
 val build_landingpad : lltype -> llvalue -> int -> string -> llbuilder ->
                          llvalue
+
+(** [is_cleanup lp] returns [true] if [landingpad] instruction lp is a cleanup.
+    See the method [llvm::LandingPadInst::isCleanup]. *)
+val is_cleanup : llvalue -> bool
 
 (** [set_cleanup lp] sets the cleanup flag in the [landingpad]instruction.
     See the method [llvm::LandingPadInst::setCleanup]. *)
@@ -2603,7 +2653,7 @@ module PassManager : sig
       See the [llvm::FunctionPassManager::run] method. *)
   val run_function : llvalue -> [ `Function ] t -> bool
 
-  (** [finalize fpm] finalizes all of the function passes scheduled in in the
+  (** [finalize fpm] finalizes all of the function passes scheduled in the
       function pass manager [fpm]. Returns [true] if any of the passes
       modified the module, [false] otherwise.
       See the [llvm::FunctionPassManager::doFinalization] method. *)

@@ -22,9 +22,9 @@
 #include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -33,10 +33,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "winehstate"
-
-namespace llvm {
-void initializeWinEHStatePassPass(PassRegistry &);
-}
 
 namespace {
 const int OverdefinedState = INT_MIN;
@@ -57,7 +53,7 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
-  const char *getPassName() const override {
+  StringRef getPassName() const override {
     return "Windows 32-bit x86 EH state insertion";
   }
 
@@ -149,6 +145,12 @@ void WinEHStatePass::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool WinEHStatePass::runOnFunction(Function &F) {
+  // Don't insert state stores or exception handler thunks for
+  // available_externally functions. The handler needs to reference the LSDA,
+  // which will not be emitted in this case.
+  if (F.hasAvailableExternallyLinkage())
+    return false;
+
   // Check the personality. Do nothing if this personality doesn't use funclets.
   if (!F.hasPersonalityFn())
     return false;
@@ -363,7 +365,7 @@ void WinEHStatePass::emitExceptionRegistrationRecord(Function *F) {
 
   // Insert an unlink before all returns.
   for (BasicBlock &BB : *F) {
-    TerminatorInst *T = BB.getTerminator();
+    Instruction *T = BB.getTerminator();
     if (!isa<ReturnInst>(T))
       continue;
     Builder.SetInsertPoint(T);
@@ -398,9 +400,11 @@ Function *WinEHStatePass::generateLSDAInEAXThunk(Function *ParentFunc) {
                         /*isVarArg=*/false);
   Function *Trampoline =
       Function::Create(TrampolineTy, GlobalValue::InternalLinkage,
-                       Twine("__ehhandler$") + GlobalValue::getRealLinkageName(
+                       Twine("__ehhandler$") + GlobalValue::dropLLVMManglingEscape(
                                                    ParentFunc->getName()),
                        TheModule);
+  if (auto *C = ParentFunc->getComdat())
+    Trampoline->setComdat(C);
   BasicBlock *EntryBB = BasicBlock::Create(Context, "entry", Trampoline);
   IRBuilder<> Builder(EntryBB);
   Value *LSDA = emitEHLSDA(Builder, ParentFunc);
@@ -412,7 +416,7 @@ Function *WinEHStatePass::generateLSDAInEAXThunk(Function *ParentFunc) {
   // Can't use musttail due to prototype mismatch, but we can use tail.
   Call->setTailCall(true);
   // Set inreg so we pass it in EAX.
-  Call->addAttribute(1, Attribute::InReg);
+  Call->addParamAttr(0, Attribute::InReg);
   Builder.CreateRet(Call);
   return Trampoline;
 }
@@ -687,10 +691,10 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
       Worklist.push_back(BB);
       continue;
     }
-    DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
-                 << " InitialState=" << InitialState << '\n');
-    DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
-                 << " FinalState=" << FinalState << '\n');
+    LLVM_DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
+                      << " InitialState=" << InitialState << '\n');
+    LLVM_DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
+                      << " FinalState=" << FinalState << '\n');
     InitialStates.insert({BB, InitialState});
     FinalStates.insert({BB, FinalState});
   }
@@ -735,8 +739,8 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
       continue;
 
     int PrevState = getPredState(FinalStates, F, ParentBaseState, BB);
-    DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
-                 << " PrevState=" << PrevState << '\n');
+    LLVM_DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
+                      << " PrevState=" << PrevState << '\n');
 
     for (Instruction &I : *BB) {
       CallSite CS(&I);

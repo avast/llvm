@@ -21,24 +21,33 @@ subdirectories =
  AsmParser
  Bitcode
  CodeGen
-; DebugInfo
-; ExecutionEngine
-; LibDriver
-; LineEditor
-; Linker
+ DebugInfo
+ Demangle
+ ExecutionEngine
+ FuzzMutate
+ LineEditor
+ Linker
  IR
  IRReader
-; LTO
+ LTO
  MC
+ MCA
  Object
-; ObjectYAML
-; Option
+ BinaryFormat
+ ObjectYAML
+ Option
+ OptRemarks
  Passes
-; ProfileData
+ ProfileData
  Support
  TableGen
+ TextAPI
  Target
+ Testing
+ ToolDrivers
  Transforms
+ WindowsManifest
+ XRay
 
 [component_0]
 type = Group

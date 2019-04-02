@@ -74,6 +74,16 @@ OPTIONS
   file are newline-separated. Lines starting with '#' are skipped. Entries may
   be of the form <filename> or <weight>,<filename>.
 
+.. option:: -remapping-file=path, -r=path
+
+  Specify a file which contains a remapping from symbol names in the input
+  profile to the symbol names that should be used in the output profile. The
+  file should consist of lines of the form ``<input-symbol> <output-symbol>``.
+  Blank lines and lines starting with ``#`` are skipped.
+
+  The :doc:`llvm-cxxmap <llvm-cxxmap>` tool can be used to generate the symbol
+  remapping file.
+
 .. option:: -instr (default)
 
  Specify that the input profile is an instrumentation-based profile.
@@ -105,6 +115,11 @@ OPTIONS
  Do not emit function records with 0 execution count. Can only be used in
  conjunction with -instr. Defaults to false, since it can inhibit compiler
  optimization during PGO.
+
+.. option:: -num-threads=N, -j=N
+
+ Use N threads to perform profile merging. When N=0, llvm-profdata auto-detects
+ an appropriate number of threads to use. This is the default.
 
 EXAMPLES
 ^^^^^^^^
@@ -187,9 +202,29 @@ OPTIONS
  information is dumped in a more human readable form (also in text) with
  annotations.
 
+.. option:: -topn=n
+
+ Instruct the profile dumper to show the top ``n`` functions with the
+ hottest basic blocks in the summary section. By default, the topn functions
+ are not dumped.
+
 .. option:: -sample
 
  Specify that the input profile is a sample-based profile.
+
+.. option:: -memop-sizes
+
+ Show the profiled sizes of the memory intrinsic calls for shown functions.
+
+.. option:: -value-cutoff=n
+
+ Show only those functions whose max count values are greater or equal to ``n``.
+ By default, the value-cutoff is set to 0.
+
+.. option:: -list-below-cutoff
+
+ Only output names of functions whose max count value are below the cutoff
+ value.
 
 EXIT STATUS
 -----------

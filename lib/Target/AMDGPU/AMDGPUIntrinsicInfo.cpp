@@ -8,7 +8,7 @@
 //==-----------------------------------------------------------------------===//
 //
 /// \file
-/// \brief AMDGPU Implementation of the IntrinsicInfo class.
+/// AMDGPU Implementation of the IntrinsicInfo class.
 //
 //===-----------------------------------------------------------------------===//
 
@@ -25,13 +25,13 @@ AMDGPUIntrinsicInfo::AMDGPUIntrinsicInfo()
 
 static const char *const IntrinsicNameTable[] = {
 #define GET_INTRINSIC_NAME_TABLE
-#include "AMDGPUGenIntrinsics.inc"
+#include "AMDGPUGenIntrinsicImpl.inc"
 #undef GET_INTRINSIC_NAME_TABLE
 };
 
 namespace {
 #define GET_INTRINSIC_ATTRIBUTES
-#include "AMDGPUGenIntrinsics.inc"
+#include "AMDGPUGenIntrinsicImpl.inc"
 #undef GET_INTRINSIC_ATTRIBUTES
 }
 
@@ -40,7 +40,7 @@ StringRef AMDGPUIntrinsicInfo::getName(unsigned IntrID,
   if (IntrID < Intrinsic::num_intrinsics)
     return StringRef();
 
-  assert(IntrID < AMDGPUIntrinsic::num_AMDGPU_intrinsics &&
+  assert(IntrID < SIIntrinsic::num_AMDGPU_intrinsics &&
          "Invalid intrinsic ID");
 
   return IntrinsicNameTable[IntrID - Intrinsic::num_intrinsics];
@@ -54,14 +54,7 @@ std::string AMDGPUIntrinsicInfo::getName(unsigned IntrID, Type **Tys,
 FunctionType *AMDGPUIntrinsicInfo::getType(LLVMContext &Context, unsigned ID,
                                            ArrayRef<Type*> Tys) const {
   // FIXME: Re-use Intrinsic::getType machinery
-  switch (ID) {
-  case AMDGPUIntrinsic::amdgcn_fdiv_fast: {
-    Type *F32Ty = Type::getFloatTy(Context);
-    return FunctionType::get(F32Ty, { F32Ty, F32Ty }, false);
-  }
-  default:
-    llvm_unreachable("unhandled intrinsic");
-  }
+  llvm_unreachable("unhandled intrinsic");
 }
 
 unsigned AMDGPUIntrinsicInfo::lookupName(const char *NameData,
@@ -87,7 +80,7 @@ unsigned AMDGPUIntrinsicInfo::lookupName(const char *NameData,
 bool AMDGPUIntrinsicInfo::isOverloaded(unsigned id) const {
 // Overload Table
 #define GET_INTRINSIC_OVERLOAD_TABLE
-#include "AMDGPUGenIntrinsics.inc"
+#include "AMDGPUGenIntrinsicImpl.inc"
 #undef GET_INTRINSIC_OVERLOAD_TABLE
 }
 
@@ -97,8 +90,8 @@ Function *AMDGPUIntrinsicInfo::getDeclaration(Module *M, unsigned IntrID,
   Function *F
     = cast<Function>(M->getOrInsertFunction(getName(IntrID, Tys), FTy));
 
-  AttributeSet AS = getAttributes(M->getContext(),
-                                  static_cast<AMDGPUIntrinsic::ID>(IntrID));
+  AttributeList AS =
+      getAttributes(M->getContext(), static_cast<SIIntrinsic::ID>(IntrID));
   F->setAttributes(AS);
   return F;
 }

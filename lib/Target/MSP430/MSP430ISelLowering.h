@@ -17,7 +17,7 @@
 
 #include "MSP430.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/Target/TargetLowering.h"
+#include "llvm/CodeGen/TargetLowering.h"
 
 namespace llvm {
   namespace MSP430ISD {
@@ -35,6 +35,9 @@ namespace llvm {
 
       /// Y = RRC X, rotate right via carry
       RRC,
+
+      /// Rotate right via carry, carry gets cleared beforehand by clrc
+      RRCL,
 
       /// CALL - These operations represent an abstract call
       /// instruction, which includes a bunch of information.
@@ -61,8 +64,9 @@ namespace llvm {
       /// is condition code and operand 4 is flag operand.
       SELECT_CC,
 
-      /// SHL, SRA, SRL - Non-constant shifts.
-      SHL, SRA, SRL
+      /// DADD - Decimal addition with carry
+      /// TODO Nothing generates a node of this type yet.
+      DADD,
     };
   }
 
@@ -157,6 +161,12 @@ namespace llvm {
     SDValue
       LowerCall(TargetLowering::CallLoweringInfo &CLI,
                 SmallVectorImpl<SDValue> &InVals) const override;
+
+    bool CanLowerReturn(CallingConv::ID CallConv,
+                        MachineFunction &MF,
+                        bool IsVarArg,
+                        const SmallVectorImpl<ISD::OutputArg> &Outs,
+                        LLVMContext &Context) const override;
 
     SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
                         const SmallVectorImpl<ISD::OutputArg> &Outs,
