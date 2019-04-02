@@ -1469,6 +1469,7 @@ Instruction *InstCombiner::foldICmpTruncConstant(ICmpInst &Cmp,
 Instruction *InstCombiner::foldICmpXorConstant(ICmpInst &Cmp,
                                                BinaryOperator *Xor,
                                                const APInt &C) {
+#if 0 // Decompiler - OFF
   Value *X = Xor->getOperand(0);
   Value *Y = Xor->getOperand(1);
   const APInt *XorC;
@@ -1534,6 +1535,7 @@ Instruction *InstCombiner::foldICmpXorConstant(ICmpInst &Cmp,
       return new ICmpInst(ICmpInst::ICMP_UGT, X,
                           ConstantInt::get(X->getType(), ~C));
   }
+#endif
   return nullptr;
 }
 
@@ -4612,6 +4614,7 @@ static ICmpInst *canonicalizeCmpWithConstant(ICmpInst &I) {
 /// Integer compare with boolean values can always be turned into bitwise ops.
 static Instruction *canonicalizeICmpBool(ICmpInst &I,
                                          InstCombiner::BuilderTy &Builder) {
+#if 0 // Decompiler - OFF
   Value *A = I.getOperand(0), *B = I.getOperand(1);
   assert(A->getType()->isIntOrIntVectorTy(1) && "Bools only");
 
@@ -4681,6 +4684,9 @@ static Instruction *canonicalizeICmpBool(ICmpInst &I,
     // icmp sle i1 A, B -> A | ~B
     return BinaryOperator::CreateOr(Builder.CreateNot(B), A);
   }
+#endif
+
+  return nullptr;
 }
 
 // Transform pattern like:
@@ -4978,6 +4984,7 @@ Instruction *InstCombiner::visitICmpInst(ICmpInst &I) {
                             ConstantInt::get(Op1->getType(), ~(*C)));
     }
 
+#if 0 // Decompiler - OFF
     Instruction *AddI = nullptr;
     if (match(&I, m_UAddWithOverflow(m_Value(A), m_Value(B),
                                      m_Instruction(AddI))) &&
@@ -5000,6 +5007,7 @@ Instruction *InstCombiner::visitICmpInst(ICmpInst &I) {
       if (Instruction *R = processUMulZExtIdiom(I, Op1, Op0, *this))
         return R;
     }
+#endif
   }
 
   if (Instruction *Res = foldICmpEquality(I))

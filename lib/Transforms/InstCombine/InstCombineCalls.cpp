@@ -1847,6 +1847,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   IntrinsicInst *II = dyn_cast<IntrinsicInst>(&CI);
   if (!II) return visitCallSite(&CI);
 
+#if 0 // Decompiler - OFF
+
   // Intrinsics cannot occur in an invoke, so handle them here instead of in
   // visitCallSite.
   if (auto *MI = dyn_cast<AnyMemIntrinsic>(II)) {
@@ -1907,6 +1909,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
 
     if (Changed) return II;
   }
+#endif
 
   if (Instruction *I = SimplifyNVVMIntrinsic(II, *this))
     return I;

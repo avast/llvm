@@ -469,6 +469,9 @@ Value *InstCombiner::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     if (match(I->getOperand(1), m_APInt(SA))) {
       const APInt *ShrAmt;
       if (match(I->getOperand(0), m_Shr(m_Value(), m_APInt(ShrAmt))))
+// Decompiler - NEW CODE START (bug #1781).
+        if (isa<Instruction>(I->getOperand(0)))
+// Decompiler - NEW CODE END.
         if (Instruction *Shr = dyn_cast<Instruction>(I->getOperand(0)))
           if (Value *R = simplifyShrShlDemandedBits(Shr, *ShrAmt, I, *SA,
                                                     DemandedMask, Known))

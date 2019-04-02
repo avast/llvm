@@ -1483,9 +1483,11 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
   if (I.getType()->isIntOrIntVectorTy(1))
     return BinaryOperator::CreateXor(Op0, Op1);
 
+#if 0 // Decompiler - OFF
   // Replace (-1 - A) with (~A).
   if (match(Op0, m_AllOnes()))
     return BinaryOperator::CreateNot(Op1);
+#endif
 
   // (~X) - (~Y) --> Y - X
   Value *X, *Y;

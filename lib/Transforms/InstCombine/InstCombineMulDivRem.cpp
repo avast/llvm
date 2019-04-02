@@ -141,12 +141,14 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
 
   // X * -1 == 0 - X
   Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
+#if 0 // Decompiler - OFF
   if (match(Op1, m_AllOnes())) {
     BinaryOperator *BO = BinaryOperator::CreateNeg(Op0, I.getName());
     if (I.hasNoSignedWrap())
       BO->setHasNoSignedWrap();
     return BO;
   }
+#endif
 
   // Also allow combining multiply instructions on vectors.
   {
@@ -168,6 +170,7 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
       return BO;
     }
 
+#if 0 // Decompiler - OFF
     if (match(&I, m_Mul(m_Value(NewOp), m_Constant(C1)))) {
       // Replace X*(2^C) with X << C, where C is either a scalar or a vector.
       if (Constant *NewCst = getLogBase2(NewOp->getType(), C1)) {
@@ -184,6 +187,7 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
         return Shl;
       }
     }
+#endif
   }
 
   if (ConstantInt *CI = dyn_cast<ConstantInt>(Op1)) {
@@ -797,12 +801,14 @@ static Instruction *foldUDivShl(Value *Op0, Value *Op1, const BinaryOperator &I,
 static size_t visitUDivOperand(Value *Op0, Value *Op1, const BinaryOperator &I,
                                SmallVectorImpl<UDivFoldAction> &Actions,
                                unsigned Depth = 0) {
+#if 0 // Decompiler - OFF
   // Check to see if this is an unsigned division with an exact power of 2,
   // if so, convert to a right shift.
   if (match(Op1, m_Power2())) {
     Actions.push_back(UDivFoldAction(foldUDivPow2Cst, Op1));
     return Actions.size();
   }
+#endif
 
   // X udiv (C1 << N), where C1 is "1<<C2"  -->  X >> (N+C2)
   if (match(Op1, m_Shl(m_Power2(), m_Value())) ||
@@ -1252,11 +1258,13 @@ Instruction *InstCombiner::visitURem(BinaryOperator &I) {
   // X urem Y -> X and Y-1, where Y is a power of 2,
   Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
   Type *Ty = I.getType();
+#if 0 // Decompiler - OFF
   if (isKnownToBeAPowerOfTwo(Op1, /*OrZero*/ true, 0, &I)) {
     Constant *N1 = Constant::getAllOnesValue(Ty);
     Value *Add = Builder.CreateAdd(Op1, N1);
     return BinaryOperator::CreateAnd(Op0, Add);
   }
+#endif
 
   // 1 urem X -> zext(X != 1)
   if (match(Op0, m_One()))

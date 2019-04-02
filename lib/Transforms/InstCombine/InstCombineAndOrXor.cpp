@@ -295,6 +295,7 @@ static unsigned conjugateICmpMask(unsigned Mask) {
 // Adapts the external decomposeBitTestICmp for local use.
 static bool decomposeBitTestICmp(Value *LHS, Value *RHS, CmpInst::Predicate &Pred,
                                  Value *&X, Value *&Y, Value *&Z) {
+#if 0 // Decompiler - OFF
   APInt Mask;
   if (!llvm::decomposeBitTestICmp(LHS, RHS, Pred, X, Mask))
     return false;
@@ -302,6 +303,8 @@ static bool decomposeBitTestICmp(Value *LHS, Value *RHS, CmpInst::Predicate &Pre
   Y = ConstantInt::get(X->getType(), Mask);
   Z = ConstantInt::get(X->getType(), 0);
   return true;
+#endif
+  return false;
 }
 
 /// Handle (icmp(A & B) ==/!= C) &/| (icmp(A & D) ==/!= E).

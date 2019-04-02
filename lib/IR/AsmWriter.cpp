@@ -3569,6 +3569,24 @@ static void maybePrintCallAddrSpace(const Value *Operand, const Instruction *I,
 
 // This member is called for each Instruction in a function..
 void AssemblyWriter::printInstruction(const Instruction &I) {
+
+// Decompiler, matula: comment special StoreInst with hexadecimal values.
+if (const StoreInst *SI = dyn_cast<StoreInst>(&I))
+{
+	if (isa<ConstantInt>(SI->getValueOperand())
+			&& isa<GlobalVariable>(SI->getPointerOperand())
+			&& SI->getPointerOperand()->getName() == "_asm_program_counter")
+	{
+		auto val = cast<ConstantInt>(SI->getValueOperand())->getZExtValue();
+
+		// DECOMPILER BEGIN (add the `0x` prefix before hex numbers)
+		Out << "\n; 0x";
+		// DECOMPILER END
+		Out.write_hex(val);
+		Out << "\n";
+	}
+}
+
   if (AnnotationWriter) AnnotationWriter->emitInstructionAnnot(&I, Out);
 
   // Print out indentation for an instruction.

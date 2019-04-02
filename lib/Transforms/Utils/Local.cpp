@@ -2201,6 +2201,15 @@ void llvm::removeUnwindEdge(BasicBlock *BB, DomTreeUpdater *DTU) {
 bool llvm::removeUnreachableBlocks(Function &F, LazyValueInfo *LVI,
                                    DomTreeUpdater *DTU,
                                    MemorySSAUpdater *MSSAU) {
+
+// Decompiler - CONDITIONAL OFF
+// Do not remove unreachable BBs if specific named metadata are present in
+// the module.
+//
+if (F.getParent()->getNamedMetadata("llvmToAsmGlobalVariableName")) {
+  return false;
+}
+
   SmallPtrSet<BasicBlock*, 16> Reachable;
   bool Changed = markAliveBlocks(F, Reachable, DTU);
 
