@@ -16,10 +16,15 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = MCDisassembler MCParser
+subdirectories =
+; MCDisassembler
+ MCParser
 
 [component_0]
 type = Library
 name = MC
 parent = Libraries
-required_libraries = Support BinaryFormat DebugInfoCodeView
+required_libraries =
+ Support
+ BinaryFormat
+; DebugInfoCodeView

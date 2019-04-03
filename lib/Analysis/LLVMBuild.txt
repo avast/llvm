@@ -19,4 +19,9 @@
 type = Library
 name = Analysis
 parent = Libraries
-required_libraries = BinaryFormat Core Object ProfileData Support
+required_libraries =
+ BinaryFormat
+ Core
+ Object
+; ProfileData
+ Support

@@ -1075,133 +1075,137 @@ Expected<bool> FunctionImporter::importFunctions(
                     << DestModule.getModuleIdentifier() << "\n");
   unsigned ImportedCount = 0, ImportedGVCount = 0;
 
-  IRMover Mover(DestModule);
-  // Do the actual import of functions now, one Module at a time
-  std::set<StringRef> ModuleNameOrderedList;
-  for (auto &FunctionsToImportPerModule : ImportList) {
-    ModuleNameOrderedList.insert(FunctionsToImportPerModule.first());
-  }
-  for (auto &Name : ModuleNameOrderedList) {
-    // Get the module for the import
-    const auto &FunctionsToImportPerModule = ImportList.find(Name);
-    assert(FunctionsToImportPerModule != ImportList.end());
-    Expected<std::unique_ptr<Module>> SrcModuleOrErr = ModuleLoader(Name);
-    if (!SrcModuleOrErr)
-      return SrcModuleOrErr.takeError();
-    std::unique_ptr<Module> SrcModule = std::move(*SrcModuleOrErr);
-    assert(&DestModule.getContext() == &SrcModule->getContext() &&
-           "Context mismatch");
-
-    // If modules were created with lazy metadata loading, materialize it
-    // now, before linking it (otherwise this will be a noop).
-    if (Error Err = SrcModule->materializeMetadata())
-      return std::move(Err);
-
-    auto &ImportGUIDs = FunctionsToImportPerModule->second;
-    // Find the globals to import
-    SetVector<GlobalValue *> GlobalsToImport;
-    for (Function &F : *SrcModule) {
-      if (!F.hasName())
-        continue;
-      auto GUID = F.getGUID();
-      auto Import = ImportGUIDs.count(GUID);
-      LLVM_DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing function "
-                        << GUID << " " << F.getName() << " from "
-                        << SrcModule->getSourceFileName() << "\n");
-      if (Import) {
-        if (Error Err = F.materialize())
-          return std::move(Err);
-        if (EnableImportMetadata) {
-          // Add 'thinlto_src_module' metadata for statistics and debugging.
-          F.setMetadata(
-              "thinlto_src_module",
-              MDNode::get(DestModule.getContext(),
-                          {MDString::get(DestModule.getContext(),
-                                         SrcModule->getSourceFileName())}));
-        }
-        GlobalsToImport.insert(&F);
-      }
-    }
-    for (GlobalVariable &GV : SrcModule->globals()) {
-      if (!GV.hasName())
-        continue;
-      auto GUID = GV.getGUID();
-      auto Import = ImportGUIDs.count(GUID);
-      LLVM_DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing global "
-                        << GUID << " " << GV.getName() << " from "
-                        << SrcModule->getSourceFileName() << "\n");
-      if (Import) {
-        if (Error Err = GV.materialize())
-          return std::move(Err);
-        ImportedGVCount += GlobalsToImport.insert(&GV);
-      }
-    }
-    for (GlobalAlias &GA : SrcModule->aliases()) {
-      if (!GA.hasName())
-        continue;
-      auto GUID = GA.getGUID();
-      auto Import = ImportGUIDs.count(GUID);
-      LLVM_DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing alias "
-                        << GUID << " " << GA.getName() << " from "
-                        << SrcModule->getSourceFileName() << "\n");
-      if (Import) {
-        if (Error Err = GA.materialize())
-          return std::move(Err);
-        // Import alias as a copy of its aliasee.
-        GlobalObject *Base = GA.getBaseObject();
-        if (Error Err = Base->materialize())
-          return std::move(Err);
-        auto *Fn = replaceAliasWithAliasee(SrcModule.get(), &GA);
-        LLVM_DEBUG(dbgs() << "Is importing aliasee fn " << Base->getGUID()
-                          << " " << Base->getName() << " from "
-                          << SrcModule->getSourceFileName() << "\n");
-        if (EnableImportMetadata) {
-          // Add 'thinlto_src_module' metadata for statistics and debugging.
-          Fn->setMetadata(
-              "thinlto_src_module",
-              MDNode::get(DestModule.getContext(),
-                          {MDString::get(DestModule.getContext(),
-                                         SrcModule->getSourceFileName())}));
-        }
-        GlobalsToImport.insert(Fn);
-      }
-    }
-
-    // Upgrade debug info after we're done materializing all the globals and we
-    // have loaded all the required metadata!
-    UpgradeDebugInfo(*SrcModule);
-
-    // Link in the specified functions.
-    if (renameModuleForThinLTO(*SrcModule, Index, &GlobalsToImport))
-      return true;
-
-    if (PrintImports) {
-      for (const auto *GV : GlobalsToImport)
-        dbgs() << DestModule.getSourceFileName() << ": Import " << GV->getName()
-               << " from " << SrcModule->getSourceFileName() << "\n";
-    }
-
-    if (Mover.move(std::move(SrcModule), GlobalsToImport.getArrayRef(),
-                   [](GlobalValue &, IRMover::ValueAdder) {},
-                   /*IsPerformingImport=*/true))
-      report_fatal_error("Function Import: link error");
-
-    ImportedCount += GlobalsToImport.size();
-    NumImportedModules++;
-  }
-
-  internalizeImmutableGVs(DestModule);
-
-  NumImportedFunctions += (ImportedCount - ImportedGVCount);
-  NumImportedGlobalVars += ImportedGVCount;
-
-  LLVM_DEBUG(dbgs() << "Imported " << ImportedCount - ImportedGVCount
-                    << " functions for Module "
-                    << DestModule.getModuleIdentifier() << "\n");
-  LLVM_DEBUG(dbgs() << "Imported " << ImportedGVCount
-                    << " global variables for Module "
-                    << DestModule.getModuleIdentifier() << "\n");
+// retdec - new code
   return ImportedCount;
+
+// retdec - old code
+//  IRMover Mover(DestModule);
+//  // Do the actual import of functions now, one Module at a time
+//  std::set<StringRef> ModuleNameOrderedList;
+//  for (auto &FunctionsToImportPerModule : ImportList) {
+//    ModuleNameOrderedList.insert(FunctionsToImportPerModule.first());
+//  }
+//  for (auto &Name : ModuleNameOrderedList) {
+//    // Get the module for the import
+//    const auto &FunctionsToImportPerModule = ImportList.find(Name);
+//    assert(FunctionsToImportPerModule != ImportList.end());
+//    Expected<std::unique_ptr<Module>> SrcModuleOrErr = ModuleLoader(Name);
+//    if (!SrcModuleOrErr)
+//      return SrcModuleOrErr.takeError();
+//    std::unique_ptr<Module> SrcModule = std::move(*SrcModuleOrErr);
+//    assert(&DestModule.getContext() == &SrcModule->getContext() &&
+//           "Context mismatch");
+//
+//    // If modules were created with lazy metadata loading, materialize it
+//    // now, before linking it (otherwise this will be a noop).
+//    if (Error Err = SrcModule->materializeMetadata())
+//      return std::move(Err);
+//
+//    auto &ImportGUIDs = FunctionsToImportPerModule->second;
+//    // Find the globals to import
+//    SetVector<GlobalValue *> GlobalsToImport;
+//    for (Function &F : *SrcModule) {
+//      if (!F.hasName())
+//        continue;
+//      auto GUID = F.getGUID();
+//      auto Import = ImportGUIDs.count(GUID);
+//      LLVM_DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing function "
+//                        << GUID << " " << F.getName() << " from "
+//                        << SrcModule->getSourceFileName() << "\n");
+//      if (Import) {
+//        if (Error Err = F.materialize())
+//          return std::move(Err);
+//        if (EnableImportMetadata) {
+//          // Add 'thinlto_src_module' metadata for statistics and debugging.
+//          F.setMetadata(
+//              "thinlto_src_module",
+//              MDNode::get(DestModule.getContext(),
+//                          {MDString::get(DestModule.getContext(),
+//                                         SrcModule->getSourceFileName())}));
+//        }
+//        GlobalsToImport.insert(&F);
+//      }
+//    }
+//    for (GlobalVariable &GV : SrcModule->globals()) {
+//      if (!GV.hasName())
+//        continue;
+//      auto GUID = GV.getGUID();
+//      auto Import = ImportGUIDs.count(GUID);
+//      LLVM_DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing global "
+//                        << GUID << " " << GV.getName() << " from "
+//                        << SrcModule->getSourceFileName() << "\n");
+//      if (Import) {
+//        if (Error Err = GV.materialize())
+//          return std::move(Err);
+//        ImportedGVCount += GlobalsToImport.insert(&GV);
+//      }
+//    }
+//    for (GlobalAlias &GA : SrcModule->aliases()) {
+//      if (!GA.hasName())
+//        continue;
+//      auto GUID = GA.getGUID();
+//      auto Import = ImportGUIDs.count(GUID);
+//      LLVM_DEBUG(dbgs() << (Import ? "Is" : "Not") << " importing alias "
+//                        << GUID << " " << GA.getName() << " from "
+//                        << SrcModule->getSourceFileName() << "\n");
+//      if (Import) {
+//        if (Error Err = GA.materialize())
+//          return std::move(Err);
+//        // Import alias as a copy of its aliasee.
+//        GlobalObject *Base = GA.getBaseObject();
+//        if (Error Err = Base->materialize())
+//          return std::move(Err);
+//        auto *Fn = replaceAliasWithAliasee(SrcModule.get(), &GA);
+//        LLVM_DEBUG(dbgs() << "Is importing aliasee fn " << Base->getGUID()
+//                          << " " << Base->getName() << " from "
+//                          << SrcModule->getSourceFileName() << "\n");
+//        if (EnableImportMetadata) {
+//          // Add 'thinlto_src_module' metadata for statistics and debugging.
+//          Fn->setMetadata(
+//              "thinlto_src_module",
+//              MDNode::get(DestModule.getContext(),
+//                          {MDString::get(DestModule.getContext(),
+//                                         SrcModule->getSourceFileName())}));
+//        }
+//        GlobalsToImport.insert(Fn);
+//      }
+//    }
+//
+//    // Upgrade debug info after we're done materializing all the globals and we
+//    // have loaded all the required metadata!
+//    UpgradeDebugInfo(*SrcModule);
+//
+//    // Link in the specified functions.
+//    if (renameModuleForThinLTO(*SrcModule, Index, &GlobalsToImport))
+//      return true;
+//
+//    if (PrintImports) {
+//      for (const auto *GV : GlobalsToImport)
+//        dbgs() << DestModule.getSourceFileName() << ": Import " << GV->getName()
+//               << " from " << SrcModule->getSourceFileName() << "\n";
+//    }
+//
+//    if (Mover.move(std::move(SrcModule), GlobalsToImport.getArrayRef(),
+//                   [](GlobalValue &, IRMover::ValueAdder) {},
+//                   /*IsPerformingImport=*/true))
+//      report_fatal_error("Function Import: link error");
+//
+//    ImportedCount += GlobalsToImport.size();
+//    NumImportedModules++;
+//  }
+//
+//  internalizeImmutableGVs(DestModule);
+//
+//  NumImportedFunctions += (ImportedCount - ImportedGVCount);
+//  NumImportedGlobalVars += ImportedGVCount;
+//
+//  LLVM_DEBUG(dbgs() << "Imported " << ImportedCount - ImportedGVCount
+//                    << " functions for Module "
+//                    << DestModule.getModuleIdentifier() << "\n");
+//  LLVM_DEBUG(dbgs() << "Imported " << ImportedGVCount
+//                    << " global variables for Module "
+//                    << DestModule.getModuleIdentifier() << "\n");
+//  return ImportedCount;
 }
 
 static bool doImportingForModule(Module &M) {

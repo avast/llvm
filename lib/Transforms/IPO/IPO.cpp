@@ -57,7 +57,9 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeStripNonDebugSymbolsPass(Registry);
   initializeBarrierNoopPass(Registry);
   initializeEliminateAvailableExternallyLegacyPassPass(Registry);
-  initializeSampleProfileLoaderLegacyPassPass(Registry);
+// RetDec - disable.
+//  initializeSampleProfileLoaderLegacyPassPass(Registry);
+// RetDec - disable end.
   initializeFunctionImportLegacyPassPass(Registry);
   initializeWholeProgramDevirtPass(Registry);
 }

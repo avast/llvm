@@ -95,9 +95,14 @@ ArrayRef<InstrProfValueData>
 ICallPromotionAnalysis::getPromotionCandidatesForInstruction(
     const Instruction *I, uint32_t &NumVals, uint64_t &TotalCount,
     uint32_t &NumCandidates) {
-  bool Res =
-      getValueProfDataFromInst(*I, IPVK_IndirectCallTarget, MaxNumPromotions,
-                               ValueDataArray.get(), NumVals, TotalCount);
+// Decompiler - new.
+  bool Res = false;
+// Decompiler - new end.
+// Decompiler - old.
+//  bool Res =
+//      getValueProfDataFromInst(*I, IPVK_IndirectCallTarget, MaxNumPromotions,
+//                               ValueDataArray.get(), NumVals, TotalCount);
+// Decompiler - old end.
   if (!Res) {
     NumCandidates = 0;
     return ArrayRef<InstrProfValueData>();
