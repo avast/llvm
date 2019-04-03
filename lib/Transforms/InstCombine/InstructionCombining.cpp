@@ -2512,14 +2512,14 @@ Instruction *InstCombiner::visitSwitchInst(SwitchInst &SI) {
   ConstantInt *AddRHS;
   if (match(Cond, m_Add(m_Value(Op0), m_ConstantInt(AddRHS)))) {
 
-// Decompiler - NEW CODE START.
+// RetDec - new code start
 	// The bug was reported to upstream on 2016-09-22
 	// (https://llvm.org/bugs/show_bug.cgi?id=30486).
     Instruction *I = dyn_cast<Instruction>(Cond);
     if (I == nullptr) {
         return nullptr;
     }
-// Decompiler - NEW CODE END.
+// RetDec - new code end
 
     // Change 'switch (X+4) case 1:' into 'switch (X) case -3'.
     for (auto Case : SI.cases()) {
@@ -3402,12 +3402,13 @@ static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
   MadeIRChange |=
       AddReachableCodeToWorklist(&F.front(), DL, Visited, ICWorklist, TLI);
 
-// Decompiler - CONDITIONAL OFF
+// RetDec - new code start
 // Do not remove instructions in unreachable BBs if specific named metadata
 // are present in the module.
 //
 auto* nmd = F.getParent()->getNamedMetadata("llvmToAsmGlobalVariableName");
 if (nmd == nullptr) {
+// RetDec - new code end
   // Do a quick scan over the function.  If we find any blocks that are
   // unreachable, remove any instructions inside of them.  This prevents
   // the instcombine code from having to deal with some bad special cases.

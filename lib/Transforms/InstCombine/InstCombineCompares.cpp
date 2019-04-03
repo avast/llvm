@@ -1469,7 +1469,7 @@ Instruction *InstCombiner::foldICmpTruncConstant(ICmpInst &Cmp,
 Instruction *InstCombiner::foldICmpXorConstant(ICmpInst &Cmp,
                                                BinaryOperator *Xor,
                                                const APInt &C) {
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
   Value *X = Xor->getOperand(0);
   Value *Y = Xor->getOperand(1);
   const APInt *XorC;
@@ -4614,7 +4614,7 @@ static ICmpInst *canonicalizeCmpWithConstant(ICmpInst &I) {
 /// Integer compare with boolean values can always be turned into bitwise ops.
 static Instruction *canonicalizeICmpBool(ICmpInst &I,
                                          InstCombiner::BuilderTy &Builder) {
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
   Value *A = I.getOperand(0), *B = I.getOperand(1);
   assert(A->getType()->isIntOrIntVectorTy(1) && "Bools only");
 
@@ -4984,7 +4984,7 @@ Instruction *InstCombiner::visitICmpInst(ICmpInst &I) {
                             ConstantInt::get(Op1->getType(), ~(*C)));
     }
 
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
     Instruction *AddI = nullptr;
     if (match(&I, m_UAddWithOverflow(m_Value(A), m_Value(B),
                                      m_Instruction(AddI))) &&

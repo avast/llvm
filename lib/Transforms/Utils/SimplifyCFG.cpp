@@ -5999,12 +5999,13 @@ bool SimplifyCFGOpt::simplifyOnce(BasicBlock *BB) {
   assert(BB && BB->getParent() && "Block not embedded in function!");
   assert(BB->getTerminator() && "Degenerate basic block encountered!");
 
-// Decompiler - CONDITIONAL OFF
+// RetDec - new code start
 // Do not remove unreachable BBs if specific named metadata are present in
 // the module.
 //
 auto* nmd = BB->getParent()->getParent()->getNamedMetadata("llvmToAsmGlobalVariableName");
 if (nmd == nullptr) {
+// RetDec - new code end
   // Remove basic blocks that have no predecessors (except the entry block)...
   // or that just have themself as a predecessor.  These are unreachable.
   if ((pred_empty(BB) && BB != &BB->getParent()->getEntryBlock()) ||

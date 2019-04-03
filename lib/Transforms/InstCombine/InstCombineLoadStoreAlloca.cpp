@@ -656,7 +656,7 @@ static Instruction *combineLoadToOperationType(InstCombiner &IC, LoadInst &LI) {
     }
   }
 
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
   // Fold away bit casts of the loaded value by loading the desired type.
   // We can do this for BitCastInsts as well as casts from and to pointer types,
   // as long as those are noops (i.e., the source or dest type have the same
@@ -1392,10 +1392,10 @@ Instruction *InstCombiner::visitStoreInst(StoreInst &SI) {
   Value *Val = SI.getOperand(0);
   Value *Ptr = SI.getOperand(1);
 
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
 /*
     We had to disable combineStoreToValueType() below because it messed up with
-    bitcasts in a way that is not compatible with how the decompiler generates
+    bitcasts in a way that is not compatible with how the RetDec generates
     C code. Consider the following piece of code:
 
        1 target datalayout = "e-p:32:32:32-f80:32:32"
@@ -1455,7 +1455,7 @@ Instruction *InstCombiner::visitStoreInst(StoreInst &SI) {
   else if (StoreAlign == 0)
     SI.setAlignment(EffectiveStoreAlign);
 
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
 /*
   We don't want -instcombine to optimize
 

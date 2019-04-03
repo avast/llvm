@@ -1075,10 +1075,10 @@ Expected<bool> FunctionImporter::importFunctions(
                     << DestModule.getModuleIdentifier() << "\n");
   unsigned ImportedCount = 0, ImportedGVCount = 0;
 
-// retdec - new code
+// RetDec - new code
   return ImportedCount;
 
-// retdec - old code
+// RetDec - old code
 //  IRMover Mover(DestModule);
 //  // Do the actual import of functions now, one Module at a time
 //  std::set<StringRef> ModuleNameOrderedList;

@@ -2202,13 +2202,14 @@ bool llvm::removeUnreachableBlocks(Function &F, LazyValueInfo *LVI,
                                    DomTreeUpdater *DTU,
                                    MemorySSAUpdater *MSSAU) {
 
-// Decompiler - CONDITIONAL OFF
+// RetDec - new code start
 // Do not remove unreachable BBs if specific named metadata are present in
 // the module.
 //
 if (F.getParent()->getNamedMetadata("llvmToAsmGlobalVariableName")) {
   return false;
 }
+// RetDec - new code end
 
   SmallPtrSet<BasicBlock*, 16> Reachable;
   bool Changed = markAliveBlocks(F, Reachable, DTU);

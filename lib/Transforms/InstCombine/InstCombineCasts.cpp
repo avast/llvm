@@ -846,7 +846,7 @@ Instruction *InstCombiner::visitTrunc(TruncInst &CI) {
 
 Instruction *InstCombiner::transformZExtICmp(ICmpInst *ICI, ZExtInst &CI,
                                              bool DoTransform) {
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
   // If we are just checking for a icmp eq of a single bit and zext'ing it
   // to an integer, then shift the bit to the appropriate place and then
   // cast to integer to avoid the comparison.
@@ -1225,7 +1225,7 @@ Instruction *InstCombiner::visitZExt(ZExtInst &CI) {
 
 /// Transform (sext icmp) to bitwise / integer operations to eliminate the icmp.
 Instruction *InstCombiner::transformSExtICmp(ICmpInst *ICI, Instruction &CI) {
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
   Value *Op0 = ICI->getOperand(0), *Op1 = ICI->getOperand(1);
   ICmpInst::Predicate Pred = ICI->getPredicate();
 

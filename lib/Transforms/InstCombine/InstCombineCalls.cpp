@@ -1847,7 +1847,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
   IntrinsicInst *II = dyn_cast<IntrinsicInst>(&CI);
   if (!II) return visitCallSite(&CI);
 
-#if 0 // Decompiler - OFF
+#if 0 // RetDec - disable
 
   // Intrinsics cannot occur in an invoke, so handle them here instead of in
   // visitCallSite.
