@@ -1232,7 +1232,9 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
   SizeOfHeaders += getHeader().sizeofcmds;
   if (getData().data() + SizeOfHeaders > getData().end()) {
     Err = malformedError("load commands extend past the end of the file");
+    consumeError(std::move(Err)); // RetDec new code.
     return;
+    // return; // RetDec original code.
   }
   if (UniversalCputype != 0 && cputype != UniversalCputype) {
     Err = malformedError("universal header architecture: " +
@@ -1276,286 +1278,362 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
             Load.C.cmd != MachO::LC_THREAD || Load.C.cmdsize % 4) {
           Err = malformedError("load command " + Twine(I) + " cmdsize not a "
                                "multiple of 8");
-          return;
+          consumeError(std::move(Err)); // RetDec new code.
+          break; // RetDec new code.
+          // return; // RetDec original code.
         }
       }
     } else {
       if (Load.C.cmdsize % 4 != 0) {
         Err = malformedError("load command " + Twine(I) + " cmdsize not a "
                              "multiple of 4");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        break; // RetDec new code.
+        // return; // RetDec original code.
       }
     }
     LoadCommands.push_back(Load);
     if (Load.C.cmd == MachO::LC_SYMTAB) {
       if ((Err = checkSymtabCommand(*this, Load, I, &SymtabLoadCmd, Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_DYSYMTAB) {
       if ((Err = checkDysymtabCommand(*this, Load, I, &DysymtabLoadCmd,
                                       Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_DATA_IN_CODE) {
       if ((Err = checkLinkeditDataCommand(*this, Load, I, &DataInCodeLoadCmd,
                                           "LC_DATA_IN_CODE", Elements,
                                           "data in code info")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_LINKER_OPTIMIZATION_HINT) {
       if ((Err = checkLinkeditDataCommand(*this, Load, I, &LinkOptHintsLoadCmd,
                                           "LC_LINKER_OPTIMIZATION_HINT",
                                           Elements, "linker optimization "
                                           "hints")))
-        return;
+
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_FUNCTION_STARTS) {
       if ((Err = checkLinkeditDataCommand(*this, Load, I, &FuncStartsLoadCmd,
                                           "LC_FUNCTION_STARTS", Elements,
                                           "function starts data")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_SEGMENT_SPLIT_INFO) {
       if ((Err = checkLinkeditDataCommand(*this, Load, I, &SplitInfoLoadCmd,
                                           "LC_SEGMENT_SPLIT_INFO", Elements,
                                           "split info data")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_DYLIB_CODE_SIGN_DRS) {
       if ((Err = checkLinkeditDataCommand(*this, Load, I, &CodeSignDrsLoadCmd,
                                           "LC_DYLIB_CODE_SIGN_DRS", Elements,
                                           "code signing RDs data")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_CODE_SIGNATURE) {
       if ((Err = checkLinkeditDataCommand(*this, Load, I, &CodeSignLoadCmd,
                                           "LC_CODE_SIGNATURE", Elements,
                                           "code signature data")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_DYLD_INFO) {
       if ((Err = checkDyldInfoCommand(*this, Load, I, &DyldInfoLoadCmd,
                                       "LC_DYLD_INFO", Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_DYLD_INFO_ONLY) {
       if ((Err = checkDyldInfoCommand(*this, Load, I, &DyldInfoLoadCmd,
                                       "LC_DYLD_INFO_ONLY", Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_UUID) {
       if (Load.C.cmdsize != sizeof(MachO::uuid_command)) {
         Err = malformedError("LC_UUID command " + Twine(I) + " has incorrect "
                              "cmdsize");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
       }
       if (UuidLoadCmd) {
         Err = malformedError("more than one LC_UUID command");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        UuidLoadCmd = Load.Ptr;
       }
-      UuidLoadCmd = Load.Ptr;
     } else if (Load.C.cmd == MachO::LC_SEGMENT_64) {
       if ((Err = parseSegmentLoadCommand<MachO::segment_command_64,
                                          MachO::section_64>(
                    *this, Load, Sections, HasPageZeroSegment, I,
                    "LC_SEGMENT_64", SizeOfHeaders, Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_SEGMENT) {
       if ((Err = parseSegmentLoadCommand<MachO::segment_command,
                                          MachO::section>(
                    *this, Load, Sections, HasPageZeroSegment, I,
                    "LC_SEGMENT", SizeOfHeaders, Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_ID_DYLIB) {
       if ((Err = checkDylibIdCommand(*this, Load, I, &DyldIdLoadCmd)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_LOAD_DYLIB) {
       if ((Err = checkDylibCommand(*this, Load, I, "LC_LOAD_DYLIB")))
-        return;
-      Libraries.push_back(Load.Ptr);
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      else // RetDec new code.
+        Libraries.push_back(Load.Ptr);
     } else if (Load.C.cmd == MachO::LC_LOAD_WEAK_DYLIB) {
       if ((Err = checkDylibCommand(*this, Load, I, "LC_LOAD_WEAK_DYLIB")))
-        return;
-      Libraries.push_back(Load.Ptr);
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      else // RetDec new code.
+        Libraries.push_back(Load.Ptr);
     } else if (Load.C.cmd == MachO::LC_LAZY_LOAD_DYLIB) {
       if ((Err = checkDylibCommand(*this, Load, I, "LC_LAZY_LOAD_DYLIB")))
-        return;
-      Libraries.push_back(Load.Ptr);
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      else // RetDec new code.
+        Libraries.push_back(Load.Ptr);
     } else if (Load.C.cmd == MachO::LC_REEXPORT_DYLIB) {
       if ((Err = checkDylibCommand(*this, Load, I, "LC_REEXPORT_DYLIB")))
-        return;
-      Libraries.push_back(Load.Ptr);
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      else // RetDec new code.
+        Libraries.push_back(Load.Ptr);
     } else if (Load.C.cmd == MachO::LC_LOAD_UPWARD_DYLIB) {
       if ((Err = checkDylibCommand(*this, Load, I, "LC_LOAD_UPWARD_DYLIB")))
-        return;
-      Libraries.push_back(Load.Ptr);
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      else // RetDec new code.
+        Libraries.push_back(Load.Ptr);
     } else if (Load.C.cmd == MachO::LC_ID_DYLINKER) {
       if ((Err = checkDyldCommand(*this, Load, I, "LC_ID_DYLINKER")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_LOAD_DYLINKER) {
       if ((Err = checkDyldCommand(*this, Load, I, "LC_LOAD_DYLINKER")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_DYLD_ENVIRONMENT) {
       if ((Err = checkDyldCommand(*this, Load, I, "LC_DYLD_ENVIRONMENT")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_VERSION_MIN_MACOSX) {
       if ((Err = checkVersCommand(*this, Load, I, &VersLoadCmd,
                                   "LC_VERSION_MIN_MACOSX")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_VERSION_MIN_IPHONEOS) {
       if ((Err = checkVersCommand(*this, Load, I, &VersLoadCmd,
                                   "LC_VERSION_MIN_IPHONEOS")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_VERSION_MIN_TVOS) {
       if ((Err = checkVersCommand(*this, Load, I, &VersLoadCmd,
                                   "LC_VERSION_MIN_TVOS")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_VERSION_MIN_WATCHOS) {
       if ((Err = checkVersCommand(*this, Load, I, &VersLoadCmd,
                                   "LC_VERSION_MIN_WATCHOS")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_NOTE) {
       if ((Err = checkNoteCommand(*this, Load, I, Elements)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_BUILD_VERSION) {
       if ((Err = parseBuildVersionCommand(*this, Load, BuildTools, I)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_RPATH) {
       if ((Err = checkRpathCommand(*this, Load, I)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_SOURCE_VERSION) {
       if (Load.C.cmdsize != sizeof(MachO::source_version_command)) {
         Err = malformedError("LC_SOURCE_VERSION command " + Twine(I) +
                              " has incorrect cmdsize");
-        return;
-      }
-      if (SourceLoadCmd) {
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else if (SourceLoadCmd) {
         Err = malformedError("more than one LC_SOURCE_VERSION command");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        SourceLoadCmd = Load.Ptr;
       }
-      SourceLoadCmd = Load.Ptr;
     } else if (Load.C.cmd == MachO::LC_MAIN) {
       if (Load.C.cmdsize != sizeof(MachO::entry_point_command)) {
         Err = malformedError("LC_MAIN command " + Twine(I) +
                              " has incorrect cmdsize");
-        return;
-      }
-      if (EntryPointLoadCmd) {
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else if (EntryPointLoadCmd) {
         Err = malformedError("more than one LC_MAIN command");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        EntryPointLoadCmd = Load.Ptr;
       }
-      EntryPointLoadCmd = Load.Ptr;
     } else if (Load.C.cmd == MachO::LC_ENCRYPTION_INFO) {
       if (Load.C.cmdsize != sizeof(MachO::encryption_info_command)) {
         Err = malformedError("LC_ENCRYPTION_INFO command " + Twine(I) +
                              " has incorrect cmdsize");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        MachO::encryption_info_command E =
+          getStruct<MachO::encryption_info_command>(*this, Load.Ptr);
+        if ((Err = checkEncryptCommand(*this, Load, I, E.cryptoff, E.cryptsize,
+                                       &EncryptLoadCmd, "LC_ENCRYPTION_INFO")))
+          consumeError(std::move(Err)); // RetDec new code.
+          // return; // RetDec original code.
       }
-      MachO::encryption_info_command E =
-        getStruct<MachO::encryption_info_command>(*this, Load.Ptr);
-      if ((Err = checkEncryptCommand(*this, Load, I, E.cryptoff, E.cryptsize,
-                                     &EncryptLoadCmd, "LC_ENCRYPTION_INFO")))
-        return;
     } else if (Load.C.cmd == MachO::LC_ENCRYPTION_INFO_64) {
       if (Load.C.cmdsize != sizeof(MachO::encryption_info_command_64)) {
         Err = malformedError("LC_ENCRYPTION_INFO_64 command " + Twine(I) +
                              " has incorrect cmdsize");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        MachO::encryption_info_command_64 E =
+          getStruct<MachO::encryption_info_command_64>(*this, Load.Ptr);
+        if ((Err = checkEncryptCommand(*this, Load, I, E.cryptoff, E.cryptsize,
+                                       &EncryptLoadCmd, "LC_ENCRYPTION_INFO_64")))
+          consumeError(std::move(Err)); // RetDec new code.
+          // return; // RetDec original code.
       }
-      MachO::encryption_info_command_64 E =
-        getStruct<MachO::encryption_info_command_64>(*this, Load.Ptr);
-      if ((Err = checkEncryptCommand(*this, Load, I, E.cryptoff, E.cryptsize,
-                                     &EncryptLoadCmd, "LC_ENCRYPTION_INFO_64")))
-        return;
     } else if (Load.C.cmd == MachO::LC_LINKER_OPTION) {
       if ((Err = checkLinkerOptCommand(*this, Load, I)))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     } else if (Load.C.cmd == MachO::LC_SUB_FRAMEWORK) {
       if (Load.C.cmdsize < sizeof(MachO::sub_framework_command)) {
         Err =  malformedError("load command " + Twine(I) +
                               " LC_SUB_FRAMEWORK cmdsize too small");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        MachO::sub_framework_command S =
+          getStruct<MachO::sub_framework_command>(*this, Load.Ptr);
+        if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_FRAMEWORK",
+                                   sizeof(MachO::sub_framework_command),
+                                   "sub_framework_command", S.umbrella,
+                                   "umbrella")))
+          consumeError(std::move(Err)); // RetDec new code.
+          // return; // RetDec original code.
       }
-      MachO::sub_framework_command S =
-        getStruct<MachO::sub_framework_command>(*this, Load.Ptr);
-      if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_FRAMEWORK",
-                                 sizeof(MachO::sub_framework_command),
-                                 "sub_framework_command", S.umbrella,
-                                 "umbrella")))
-        return;
     } else if (Load.C.cmd == MachO::LC_SUB_UMBRELLA) {
       if (Load.C.cmdsize < sizeof(MachO::sub_umbrella_command)) {
         Err =  malformedError("load command " + Twine(I) +
                               " LC_SUB_UMBRELLA cmdsize too small");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        MachO::sub_umbrella_command S =
+          getStruct<MachO::sub_umbrella_command>(*this, Load.Ptr);
+        if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_UMBRELLA",
+                                   sizeof(MachO::sub_umbrella_command),
+                                   "sub_umbrella_command", S.sub_umbrella,
+                                   "sub_umbrella")))
+          consumeError(std::move(Err)); // RetDec new code.
+          // return; // RetDec original code.
       }
-      MachO::sub_umbrella_command S =
-        getStruct<MachO::sub_umbrella_command>(*this, Load.Ptr);
-      if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_UMBRELLA",
-                                 sizeof(MachO::sub_umbrella_command),
-                                 "sub_umbrella_command", S.sub_umbrella,
-                                 "sub_umbrella")))
-        return;
     } else if (Load.C.cmd == MachO::LC_SUB_LIBRARY) {
       if (Load.C.cmdsize < sizeof(MachO::sub_library_command)) {
         Err =  malformedError("load command " + Twine(I) +
                               " LC_SUB_LIBRARY cmdsize too small");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        MachO::sub_library_command S =
+          getStruct<MachO::sub_library_command>(*this, Load.Ptr);
+        if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_LIBRARY",
+                                   sizeof(MachO::sub_library_command),
+                                   "sub_library_command", S.sub_library,
+                                   "sub_library")))
+          consumeError(std::move(Err)); // RetDec new code.
+          // return; // RetDec original code.
       }
-      MachO::sub_library_command S =
-        getStruct<MachO::sub_library_command>(*this, Load.Ptr);
-      if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_LIBRARY",
-                                 sizeof(MachO::sub_library_command),
-                                 "sub_library_command", S.sub_library,
-                                 "sub_library")))
-        return;
     } else if (Load.C.cmd == MachO::LC_SUB_CLIENT) {
       if (Load.C.cmdsize < sizeof(MachO::sub_client_command)) {
         Err =  malformedError("load command " + Twine(I) +
                               " LC_SUB_CLIENT cmdsize too small");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        MachO::sub_client_command S =
+          getStruct<MachO::sub_client_command>(*this, Load.Ptr);
+        if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_CLIENT",
+                                   sizeof(MachO::sub_client_command),
+                                   "sub_client_command", S.client, "client")))
+          consumeError(std::move(Err)); // RetDec new code.
+          // return; // RetDec original code.
       }
-      MachO::sub_client_command S =
-        getStruct<MachO::sub_client_command>(*this, Load.Ptr);
-      if ((Err = checkSubCommand(*this, Load, I, "LC_SUB_CLIENT",
-                                 sizeof(MachO::sub_client_command),
-                                 "sub_client_command", S.client, "client")))
-        return;
     } else if (Load.C.cmd == MachO::LC_ROUTINES) {
       if (Load.C.cmdsize != sizeof(MachO::routines_command)) {
         Err = malformedError("LC_ROUTINES command " + Twine(I) +
                              " has incorrect cmdsize");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
       }
-      if (RoutinesLoadCmd) {
+      else if (RoutinesLoadCmd) {
         Err = malformedError("more than one LC_ROUTINES and or LC_ROUTINES_64 "
                              "command");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        RoutinesLoadCmd = Load.Ptr;
       }
-      RoutinesLoadCmd = Load.Ptr;
     } else if (Load.C.cmd == MachO::LC_ROUTINES_64) {
       if (Load.C.cmdsize != sizeof(MachO::routines_command_64)) {
         Err = malformedError("LC_ROUTINES_64 command " + Twine(I) +
                              " has incorrect cmdsize");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
       }
-      if (RoutinesLoadCmd) {
+      else if (RoutinesLoadCmd) {
         Err = malformedError("more than one LC_ROUTINES_64 and or LC_ROUTINES "
                              "command");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        RoutinesLoadCmd = Load.Ptr;
       }
-      RoutinesLoadCmd = Load.Ptr;
     } else if (Load.C.cmd == MachO::LC_UNIXTHREAD) {
       if ((Err = checkThreadCommand(*this, Load, I, "LC_UNIXTHREAD")))
-        return;
-      if (UnixThreadLoadCmd) {
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      else if (UnixThreadLoadCmd) {
         Err = malformedError("more than one LC_UNIXTHREAD command");
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
+      } else { // RetDec new code.
+        UnixThreadLoadCmd = Load.Ptr;
       }
-      UnixThreadLoadCmd = Load.Ptr;
     } else if (Load.C.cmd == MachO::LC_THREAD) {
       if ((Err = checkThreadCommand(*this, Load, I, "LC_THREAD")))
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        // return; // RetDec original code.
     // Note: LC_TWOLEVEL_HINTS is really obsolete and is not supported.
     } else if (Load.C.cmd == MachO::LC_TWOLEVEL_HINTS) {
        if ((Err = checkTwoLevelHintsCommand(*this, Load, I,
                                             &TwoLevelHintsLoadCmd, Elements)))
-         return;
+         consumeError(std::move(Err)); // RetDec new code.
+         // return; // RetDec original code.
     } else if (isLoadCommandObsolete(Load.C.cmd)) {
       Err = malformedError("load command " + Twine(I) + " for cmd value of: " +
                            Twine(Load.C.cmd) + " is obsolete and not "
                            "supported");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
     // TODO: generate a error for unknown load commands by default.  But still
     // need work out an approach to allow or not allow unknown values like this
@@ -1565,7 +1643,9 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
         Load = *LoadOrErr;
       else {
         Err = LoadOrErr.takeError();
-        return;
+        consumeError(std::move(Err)); // RetDec new code.
+        break; // RetDec new code.
+        // return; // RetDec original code.
       }
     }
   }
@@ -1573,6 +1653,7 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
     if (DysymtabLoadCmd) {
       Err = malformedError("contains LC_DYSYMTAB load command without a "
                            "LC_SYMTAB load command");
+      consumeError(std::move(Err)); // RetDec new code.
       return;
     }
   } else if (DysymtabLoadCmd) {
@@ -1583,19 +1664,22 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
     if (Dysymtab.nlocalsym != 0 && Dysymtab.ilocalsym > Symtab.nsyms) {
       Err = malformedError("ilocalsym in LC_DYSYMTAB load command "
                            "extends past the end of the symbol table");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
     uint64_t BigSize = Dysymtab.ilocalsym;
     BigSize += Dysymtab.nlocalsym;
     if (Dysymtab.nlocalsym != 0 && BigSize > Symtab.nsyms) {
       Err = malformedError("ilocalsym plus nlocalsym in LC_DYSYMTAB load "
                            "command extends past the end of the symbol table");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
     if (Dysymtab.nextdefsym != 0 && Dysymtab.iextdefsym > Symtab.nsyms) {
       Err = malformedError("iextdefsym in LC_DYSYMTAB load command "
                            "extends past the end of the symbol table");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
     BigSize = Dysymtab.iextdefsym;
     BigSize += Dysymtab.nextdefsym;
@@ -1603,19 +1687,22 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
       Err = malformedError("iextdefsym plus nextdefsym in LC_DYSYMTAB "
                            "load command extends past the end of the symbol "
                            "table");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
     if (Dysymtab.nundefsym != 0 && Dysymtab.iundefsym > Symtab.nsyms) {
       Err = malformedError("iundefsym in LC_DYSYMTAB load command "
                            "extends past the end of the symbol table");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
     BigSize = Dysymtab.iundefsym;
     BigSize += Dysymtab.nundefsym;
     if (Dysymtab.nundefsym != 0 && BigSize > Symtab.nsyms) {
       Err = malformedError("iundefsym plus nundefsym in LC_DYSYMTAB load "
                            " command extends past the end of the symbol table");
-      return;
+      consumeError(std::move(Err)); // RetDec new code.
+      // return; // RetDec original code.
     }
   }
   if ((getHeader().filetype == MachO::MH_DYLIB ||
@@ -1623,7 +1710,8 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
        DyldIdLoadCmd == nullptr) {
     Err = malformedError("no LC_ID_DYLIB load command in dynamic library "
                          "filetype");
-    return;
+    consumeError(std::move(Err)); // RetDec new code.
+    // return; // RetDec original code.
   }
   assert(LoadCommands.size() == LoadCommandCount);
 
