@@ -1392,56 +1392,9 @@ Instruction *InstCombiner::visitStoreInst(StoreInst &SI) {
   Value *Val = SI.getOperand(0);
   Value *Ptr = SI.getOperand(1);
 
-#if 0 // RetDec - disable
-/*
-    We had to disable combineStoreToValueType() below because it messed up with
-    bitcasts in a way that is not compatible with how the RetDec generates
-    C code. Consider the following piece of code:
-
-       1 target datalayout = "e-p:32:32:32-f80:32:32"
-       2
-       3 @g = global i32 0
-       4
-       5 declare double @func()
-       6
-       7 define i32 @main(i32 %argc, i8** %argv) {
-       8   %func_res = call double @func()
-       9   %tmp1 = fptrunc double %func_res to float
-      10   %tmp2 = bitcast float %tmp1 to i32
-      11   store i32 %tmp2, i32* @g
-      12   ret i32 0
-      13 }
-
-    In LLVM 3.4, opt optimized it to
-
-      define i32 @main(i32 %argc, i8** %argv) {
-      bb:
-        %func_res = call double @func()
-        %tmp1 = fptrunc double %func_res to float
-        %tmp2 = bitcast float %tmp1 to i32
-        store i32 %tmp2, i32* @g, align 4
-        ret i32 0
-      }
-
-    However, in LLVM 3.6, opt produced the following code:
-
-      define i32 @main(i32 %argc, i8** %argv) {
-      bb:
-        %func_res = call double @func()
-        %tmp1 = fptrunc double %func_res to float
-        store float %tmp1, float* bitcast (i32* @g to float*), align 4
-        ret i32 0
-      }
-
-    In the above code, instead of storing %tmp1 via %tmp2 as an int to @g, it
-    stores %tmp1 as float to a float-casted @g. This is not what we want -- we
-    want the original behavior because the type casts are important to us (due
-    to the fact that we generate C).
-*/
   // Try to canonicalize the stored type.
   if (combineStoreToValueType(*this, SI))
     return eraseInstFromFunction(SI);
-#endif
 
   // Attempt to improve the alignment.
   unsigned KnownAlign = getOrEnforceKnownAlignment(
