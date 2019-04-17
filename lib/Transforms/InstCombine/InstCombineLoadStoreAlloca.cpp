@@ -656,7 +656,6 @@ static Instruction *combineLoadToOperationType(InstCombiner &IC, LoadInst &LI) {
     }
   }
 
-#if 0 // RetDec - disable
   // Fold away bit casts of the loaded value by loading the desired type.
   // We can do this for BitCastInsts as well as casts from and to pointer types,
   // as long as those are noops (i.e., the source or dest type have the same
@@ -670,7 +669,6 @@ static Instruction *combineLoadToOperationType(InstCombiner &IC, LoadInst &LI) {
           IC.eraseInstFromFunction(*CI);
           return &LI;
         }
-#endif
 
   // FIXME: We should also canonicalize loads of vectors when their elements are
   // cast to other types.
