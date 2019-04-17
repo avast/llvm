@@ -1,6 +1,6 @@
 # LLVM
 
-A clone of [LLVM](https://llvm.org/) 3.9.1 modified for use in [RetDec](https://github.com/avast-tl/retdec) and associated tools.
+A clone of [LLVM](https://llvm.org/) 3.9.1 modified for use in [RetDec](https://github.com/avast/retdec) and associated tools.
 
 **Warning: LLVM in this repository was modified and does not behave the same as the vanilla version!**
 

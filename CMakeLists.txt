@@ -265,7 +265,7 @@ set(FFI_INCLUDE_DIR "" CACHE PATH "Additional directory, where CMake should sear
 # LLVM_NATIVE_ARCH. Without forcing X86, LLVM_NATIVE_ARCH gets autodetected and
 # target for this architecture will be added. However, we only have one target,
 # x86.
-# See https://github.com/avast-tl/llvm/issues/3
+# See https://github.com/avast/llvm/issues/3
 set(LLVM_TARGET_ARCH "X86"
   CACHE STRING "Set target to use for LLVM JIT or use \"host\" for automatic detection.")
 
