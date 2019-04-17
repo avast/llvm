@@ -170,7 +170,6 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
       return BO;
     }
 
-#if 0 // RetDec - disable
     if (match(&I, m_Mul(m_Value(NewOp), m_Constant(C1)))) {
       // Replace X*(2^C) with X << C, where C is either a scalar or a vector.
       if (Constant *NewCst = getLogBase2(NewOp->getType(), C1)) {
@@ -187,7 +186,6 @@ Instruction *InstCombiner::visitMul(BinaryOperator &I) {
         return Shl;
       }
     }
-#endif
   }
 
   if (ConstantInt *CI = dyn_cast<ConstantInt>(Op1)) {
