@@ -2391,10 +2391,23 @@ Instruction *InstCombiner::visitBitCast(BitCastInst &CI) {
     }
   }
 
+#if 0 // RetDec - OFF
+  // Matula: After we disabled some load/store optimizations in
+  // InstCombineLoadStoreAlloca.cpp, LLVM could end up in an infinite cycle
+  // caused by this optimization step.
+  // The first solution was to re-enable load/store optimizations and counter
+  // them later in our own instruction optimization pass that undos LLVM's
+  // modifications. This worked reasonably well in most cases. However, in some
+  // cases it caused different (worse) LLVM IR produced by LLVM optimizations.
+  // Therefore, I decided to disable this optimization step as well as
+  // some load/store optimizations. This step was not present in LLVM 3.9.1.
+  // and it looks like we don't really need it.
+
   // Handle the A->B->A cast, and there is an intervening PHI node.
   if (PHINode *PN = dyn_cast<PHINode>(Src))
     if (Instruction *I = optimizeBitCastFromPhi(CI, PN))
       return I;
+#endif
 
   if (Instruction *I = canonicalizeBitCastExtElt(CI, *this))
     return I;
