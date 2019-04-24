@@ -10,15 +10,14 @@ using namespace llvm::pdb;
 // deal with the Error value directly, rather than converting to error_code.
 class DIAErrorCategory : public std::error_category {
 public:
-  const char *name() const LLVM_NOEXCEPT override { return "llvm.pdb.dia"; }
-
+  const char *name() const noexcept override { return "llvm.pdb.dia"; }
   std::string message(int Condition) const override {
     switch (static_cast<dia_error_code>(Condition)) {
     case dia_error_code::could_not_create_impl:
-      return "Failed to connect to DIA at runtime.  Verify that Visual Studio "
+      return "Failed to connect to DIA at runtime. Verify that Visual Studio "
              "is properly installed, or that msdiaXX.dll is in your PATH.";
     case dia_error_code::invalid_file_format:
-      return "Unable to load PDB.  The file has an unrecognized format.";
+      return "Unable to load PDB. The file has an unrecognized format.";
     case dia_error_code::invalid_parameter:
       return "The parameter is incorrect.";
     case dia_error_code::already_loaded:
@@ -32,28 +31,7 @@ public:
   }
 };
 
-static ManagedStatic<DIAErrorCategory> Category;
+static llvm::ManagedStatic<DIAErrorCategory> DIACategory;
+const std::error_category &llvm::pdb::DIAErrCategory() { return *DIACategory; }
 
-char DIAError::ID = 0;
-
-DIAError::DIAError(dia_error_code C) : DIAError(C, "") {}
-
-DIAError::DIAError(const std::string &Context)
-    : DIAError(dia_error_code::unspecified, Context) {}
-
-DIAError::DIAError(dia_error_code C, const std::string &Context) : Code(C) {
-  ErrMsg = "DIA Error: ";
-  std::error_code EC = convertToErrorCode();
-  if (Code != dia_error_code::unspecified)
-    ErrMsg += EC.message() + "  ";
-  if (!Context.empty())
-    ErrMsg += Context;
-}
-
-void DIAError::log(raw_ostream &OS) const { OS << ErrMsg << "\n"; }
-
-const std::string &DIAError::getErrorMessage() const { return ErrMsg; }
-
-std::error_code DIAError::convertToErrorCode() const {
-  return std::error_code(static_cast<int>(Code), *Category);
-}
+char DIAError::ID;

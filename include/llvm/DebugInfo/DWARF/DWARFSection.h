@@ -1,4 +1,4 @@
-//===-- DWARFSection.h ------------------------------------------*- C++ -*-===//
+//===- DWARFSection.h -------------------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,19 +7,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_DEBUGINFO_DWARFSECTION_H
-#define LLVM_LIB_DEBUGINFO_DWARFSECTION_H
+#ifndef LLVM_DEBUGINFO_DWARF_DWARFSECTION_H
+#define LLVM_DEBUGINFO_DWARF_DWARFSECTION_H
 
-#include "llvm/DebugInfo/DWARF/DWARFRelocMap.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
 
 struct DWARFSection {
   StringRef Data;
-  RelocAddrMap Relocs;
 };
 
-}
+struct SectionName {
+  StringRef Name;
+  bool IsNameUnique;
+};
 
-#endif
+struct SectionedAddress {
+  uint64_t Address;
+  uint64_t SectionIndex;
+};
+
+} // end namespace llvm
+
+#endif // LLVM_DEBUGINFO_DWARF_DWARFSECTION_H

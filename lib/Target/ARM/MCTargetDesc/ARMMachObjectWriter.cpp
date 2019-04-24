@@ -7,10 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "MCTargetDesc/ARMBaseInfo.h"
 #include "MCTargetDesc/ARMFixupKinds.h"
+#include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmLayout.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
@@ -21,7 +22,8 @@
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MachO.h"
+#include "llvm/Support/ScopedPrinter.h"
+
 using namespace llvm;
 
 namespace {
@@ -144,6 +146,15 @@ RecordARMScatteredHalfRelocation(MachObjectWriter *Writer,
                                  MCValue Target,
                                  uint64_t &FixedValue) {
   uint32_t FixupOffset = Layout.getFragmentOffset(Fragment)+Fixup.getOffset();
+
+  if (FixupOffset & 0xff000000) {
+    Asm.getContext().reportError(Fixup.getLoc(),
+                                 "can not encode offset '0x" +
+                                     to_hexString(FixupOffset) +
+                                     "' in resulting scattered relocation.");
+    return;
+  }
+
   unsigned IsPCRel = Writer->isFixupKindPCRel(Asm, Fixup.getKind());
   unsigned Type = MachO::ARM_RELOC_HALF;
 
@@ -208,7 +219,7 @@ RecordARMScatteredHalfRelocation(MachObjectWriter *Writer,
     if (Asm.isThumbFunc(A))
       FixedValue &= 0xfffffffe;
     MovtBit = 1;
-    // Fallthrough
+    LLVM_FALLTHROUGH;
   case ARM::fixup_t2_movw_lo16:
     ThumbBit = 1;
     break;
@@ -250,6 +261,15 @@ void ARMMachObjectWriter::RecordARMScatteredRelocation(MachObjectWriter *Writer,
                                                     unsigned Log2Size,
                                                     uint64_t &FixedValue) {
   uint32_t FixupOffset = Layout.getFragmentOffset(Fragment)+Fixup.getOffset();
+
+  if (FixupOffset & 0xff000000) {
+    Asm.getContext().reportError(Fixup.getLoc(),
+                                 "can not encode offset '0x" +
+                                     to_hexString(FixupOffset) +
+                                     "' in resulting scattered relocation.");
+    return;
+  }
+
   unsigned IsPCRel = Writer->isFixupKindPCRel(Asm, Fixup.getKind());
 
   // See <reloc.h>.
@@ -322,6 +342,14 @@ bool ARMMachObjectWriter::requiresExternRelocation(MachObjectWriter *Writer,
   default:
     return false;
   case MachO::ARM_RELOC_BR24:
+    // An ARM call might be to a Thumb function, in which case the offset may
+    // not be encodable in the instruction and we must use an external
+    // relocation that explicitly mentions the function. Not a problem if it's
+    // to a temporary "Lwhatever" symbol though, and in fact trying to use an
+    // external relocation there causes more issues.
+    if (!S.isTemporary())
+       return true;
+
     // PC pre-adjustment of 8 for these instructions.
     Value -= 8;
     // ARM BL/BLX has a 25-bit offset.
@@ -476,11 +504,8 @@ void ARMMachObjectWriter::recordRelocation(MachObjectWriter *Writer,
   Writer->addRelocation(RelSymbol, Fragment->getParent(), MRE);
 }
 
-MCObjectWriter *llvm::createARMMachObjectWriter(raw_pwrite_stream &OS,
-                                                bool Is64Bit, uint32_t CPUType,
-                                                uint32_t CPUSubtype) {
-  return createMachObjectWriter(new ARMMachObjectWriter(Is64Bit,
-                                                        CPUType,
-                                                        CPUSubtype),
-                                OS, /*IsLittleEndian=*/true);
+std::unique_ptr<MCObjectTargetWriter>
+llvm::createARMMachObjectWriter(bool Is64Bit, uint32_t CPUType,
+                                uint32_t CPUSubtype) {
+  return llvm::make_unique<ARMMachObjectWriter>(Is64Bit, CPUType, CPUSubtype);
 }

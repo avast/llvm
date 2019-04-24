@@ -63,6 +63,8 @@ representation.
    CMakePrimer
    AdvancedBuilds
    HowToBuildOnARM
+   HowToBuildWithPGO
+   HowToCrossCompileBuiltinsOnArm
    HowToCrossCompileLLVM
    CommandGuide/index
    GettingStarted
@@ -73,6 +75,7 @@ representation.
    yaml2obj
    HowToSubmitABug
    SphinxQuickstartTemplate
+   MarkdownQuickstartTemplate
    Phabricator
    TestingGuide
    tutorial/index
@@ -85,6 +88,8 @@ representation.
    CodeOfConduct
    CompileCudaWithLLVM
    ReportingGuide
+   Benchmarking
+   Docker
 
 :doc:`GettingStarted`
    Discusses how to get up and running quickly with the LLVM infrastructure.
@@ -97,6 +102,12 @@ representation.
 
 :doc:`HowToBuildOnARM`
    Notes on building and testing LLVM/Clang on ARM.
+
+:doc:`HowToBuildWithPGO`
+    Notes on building LLVM/Clang with PGO.
+
+:doc:`HowToCrossCompileBuiltinsOnArm`
+   Notes on cross-building and testing the compiler-rt builtins for Arm.
 
 :doc:`HowToCrossCompileLLVM`
    Notes on cross-building and testing LLVM/Clang.
@@ -133,6 +144,9 @@ representation.
 :doc:`LLVM Testing Infrastructure Guide <TestingGuide>`
    A reference manual for using the LLVM testing infrastructure.
 
+:doc:`TestSuiteGuide`
+  Describes how to compile and run the test-suite benchmarks.
+
 `How to build the C, C++, ObjC, and ObjC++ front end`__
    Instructions for building the clang front-end from source.
 
@@ -152,8 +166,11 @@ representation.
   misunderstood instruction.
 
 :doc:`Frontend/PerformanceTips`
-   A collection of tips for frontend authors on how to generate IR 
+   A collection of tips for frontend authors on how to generate IR
    which LLVM is able to effectively optimize.
+
+:doc:`Docker`
+   A reference for using Dockerfiles provided with LLVM.
 
 
 Programming Documentation
@@ -173,7 +190,9 @@ For developers of applications which use LLVM as a library.
    ProgrammersManual
    Extensions
    LibFuzzer
+   FuzzingLLVM
    ScudoHardenedAllocator
+   OptBisect
 
 :doc:`LLVM Language Reference Manual <LangRef>`
   Defines the LLVM intermediate representation and the assembly form of the
@@ -205,11 +224,10 @@ For developers of applications which use LLVM as a library.
 
 `Doxygen generated documentation <http://llvm.org/doxygen/>`_
   (`classes <http://llvm.org/doxygen/inherits.html>`_)
-  (`tarball <http://llvm.org/doxygen/doxygen.tar.gz>`_)
 
 `Documentation for Go bindings <http://godoc.org/llvm.org/llvm/bindings/go/llvm>`_
 
-`ViewVC Repository Browser <http://llvm.org/viewvc/>`_
+`Github Source Repository Browser <http://github.com/llvm/llvm-project//>`_
    ..
 
 :doc:`CompilerWriterInfo`
@@ -218,8 +236,16 @@ For developers of applications which use LLVM as a library.
 :doc:`LibFuzzer`
   A library for writing in-process guided fuzzers.
 
+:doc:`FuzzingLLVM`
+  Information on writing and using Fuzzers to find bugs in LLVM.
+
 :doc:`ScudoHardenedAllocator`
   A library that implements a security-hardened `malloc()`.
+
+:doc:`OptBisect`
+  A command line option for debugging optimization-induced failures.
+
+.. _index-subsystem-docs:
 
 Subsystem Documentation
 =======================
@@ -230,6 +256,7 @@ For API clients and LLVM developers.
    :hidden:
 
    AliasAnalysis
+   MemorySSA
    BitCodeFormat
    BlockFrequencyTerminology
    BranchWeightMetadata
@@ -244,6 +271,7 @@ For API clients and LLVM developers.
    GoldPlugin
    MarkedUpDisassembly
    SystemLibrary
+   SupportLibrary
    SourceLevelDebugging
    Vectorizers
    WritingAnLLVMBackend
@@ -259,8 +287,18 @@ For API clients and LLVM developers.
    Statepoints
    MergeFunctions
    TypeMetadata
+   TransformMetadata
    FaultMaps
    MIRLangRef
+   Coroutines
+   GlobalISel
+   XRay
+   XRayExample
+   XRayFDRFormat
+   PDB/index
+   CFIVerify
+   SpeculativeLoadHardening
+   StackSafetyAnalysis
 
 :doc:`WritingAnLLVMPass`
    Information on how to write LLVM transformations and analyses.
@@ -285,6 +323,9 @@ For API clients and LLVM developers.
    Information on how to write a new alias analysis implementation or how to
    use existing analyses.
 
+:doc:`MemorySSA`
+   Information about the MemorySSA utility in LLVM, as well as how to use it.
+
 :doc:`GarbageCollection`
    The interfaces source-language compilers should use for compiling GC'd
    programs.
@@ -307,8 +348,8 @@ For API clients and LLVM developers.
 :doc:`BitCodeFormat`
    This describes the file format and encoding used for LLVM "bc" files.
 
-:doc:`System Library <SystemLibrary>`
-   This document describes the LLVM System Library (``lib/System``) and
+:doc:`Support Library <SupportLibrary>`
+   This document describes the LLVM Support Library (``lib/Support``) and
    how to keep LLVM source code portable
 
 :doc:`LinkTimeOptimization`
@@ -341,10 +382,10 @@ For API clients and LLVM developers.
   Answers some questions about the new Attributes infrastructure.
 
 :doc:`NVPTXUsage`
-   This document describes using the NVPTX back-end to compile GPU kernels.
+   This document describes using the NVPTX backend to compile GPU kernels.
 
 :doc:`AMDGPUUsage`
-   This document describes how to use the AMDGPU back-end.
+   This document describes using the AMDGPU backend to compile GPU kernels.
 
 :doc:`StackMaps`
   LLVM support for mapping instruction addresses to the location of
@@ -373,6 +414,31 @@ For API clients and LLVM developers.
 :doc:`CompileCudaWithLLVM`
   LLVM support for CUDA.
 
+:doc:`Coroutines`
+  LLVM support for coroutines.
+
+:doc:`GlobalISel`
+  This describes the prototype instruction selection replacement, GlobalISel.
+
+:doc:`XRay`
+  High-level documentation of how to use XRay in LLVM.
+
+:doc:`XRayExample`
+  An example of how to debug an application with XRay.
+
+:doc:`The Microsoft PDB File Format <PDB/index>`
+  A detailed description of the Microsoft PDB (Program Database) file format.
+
+:doc:`CFIVerify`
+  A description of the verification tool for Control Flow Integrity.
+
+:doc:`SpeculativeLoadHardening`
+  A description of the Speculative Load Hardening mitigation for Spectre v1.
+
+:doc:`StackSafetyAnalysis`
+  This document describes the design of the stack safety analysis of local
+  variables.
+
 Development Process Documentation
 =================================
 
@@ -381,6 +447,7 @@ Information about LLVM's development process.
 .. toctree::
    :hidden:
 
+   Contributing
    DeveloperPolicy
    Projects
    LLVMBuild
@@ -388,6 +455,10 @@ Information about LLVM's development process.
    Packaging
    ReleaseProcess
    Phabricator
+   BugLifeCycle
+
+:doc:`Contributing`
+   An overview on how to contribute to LLVM.
 
 :doc:`DeveloperPolicy`
    The LLVM project's policy towards developers and their contributions.
@@ -414,6 +485,9 @@ Information about LLVM's development process.
 :doc:`Phabricator`
    Describes how to use the Phabricator code review tool hosted on
    http://reviews.llvm.org/ and its command line interface, Arcanist.
+
+:doc:`BugLifeCycle`
+   Describes how bugs are reported, triaged and closed.
 
 Community
 =========
@@ -483,6 +557,32 @@ This channel has several bots.
 * clang-bot - A `geordi <http://www.eelis.net/geordi/>`_ instance running
   near-trunk clang instead of gcc.
 
+Community wide proposals
+------------------------
+
+Proposals for massive changes in how the community behaves and how the work flow
+can be better.
+
+.. toctree::
+   :hidden:
+
+   CodeOfConduct
+   Proposals/GitHubMove
+   Proposals/TestSuite
+   Proposals/VectorizationPlan
+
+:doc:`CodeOfConduct`
+   Proposal to adopt a code of conduct on the LLVM social spaces (lists, events,
+   IRC, etc).
+
+:doc:`Proposals/GitHubMove`
+   Proposal to move from SVN/Git to GitHub.
+
+:doc:`Proposals/TestSuite`
+   Proposals for additional benchmarks/programs for llvm's test-suite.
+
+:doc:`Proposals/VectorizationPlan`
+   Proposal to model the process and upgrade the infrastructure of LLVM's Loop Vectorizer.
 
 Indices and tables
 ==================

@@ -17,6 +17,8 @@
 
 [common]
 subdirectories =
+ AggressiveInstCombine
+; Coroutines
  IPO
  InstCombine
 ; Instrumentation

@@ -42,7 +42,6 @@ def IIC_LdStLoad     : InstrItinClass;
 def IIC_LdStLoadUpd  : InstrItinClass;
 def IIC_LdStLoadUpdX : InstrItinClass;
 def IIC_LdStStore    : InstrItinClass;
-def IIC_LdStStoreUpd : InstrItinClass;
 def IIC_LdStDSS      : InstrItinClass;
 def IIC_LdStICBI     : InstrItinClass;
 def IIC_LdStLD       : InstrItinClass;
@@ -63,8 +62,8 @@ def IIC_LdStSLBIA    : InstrItinClass;
 def IIC_LdStSLBIE    : InstrItinClass;
 def IIC_LdStSTD      : InstrItinClass;
 def IIC_LdStSTDCX    : InstrItinClass;
-def IIC_LdStSTDU     : InstrItinClass;
-def IIC_LdStSTDUX    : InstrItinClass;
+def IIC_LdStSTU      : InstrItinClass;
+def IIC_LdStSTUX     : InstrItinClass;
 def IIC_LdStSTFD     : InstrItinClass;
 def IIC_LdStSTFDU    : InstrItinClass;
 def IIC_LdStSTVEBX   : InstrItinClass;
@@ -87,6 +86,8 @@ def IIC_SprMTSRIN    : InstrItinClass;
 def IIC_SprRFI       : InstrItinClass;
 def IIC_SprSC        : InstrItinClass;
 def IIC_FPGeneral    : InstrItinClass;
+def IIC_FPDGeneral   : InstrItinClass;
+def IIC_FPSGeneral   : InstrItinClass;
 def IIC_FPAddSub     : InstrItinClass;
 def IIC_FPCompare    : InstrItinClass;
 def IIC_FPDivD       : InstrItinClass;
@@ -109,6 +110,7 @@ def IIC_SprSLBIE     : InstrItinClass;
 def IIC_SprSLBIEG    : InstrItinClass;
 def IIC_SprSLBMTE    : InstrItinClass;
 def IIC_SprSLBMFEE   : InstrItinClass;
+def IIC_SprSLBMFEV   : InstrItinClass;
 def IIC_SprSLBIA     : InstrItinClass;
 def IIC_SprSLBSYNC   : InstrItinClass;
 def IIC_SprTLBIA     : InstrItinClass;
@@ -117,6 +119,8 @@ def IIC_SprTLBIE     : InstrItinClass;
 def IIC_SprABORT     : InstrItinClass;
 def IIC_SprMSGSYNC   : InstrItinClass;
 def IIC_SprSTOP      : InstrItinClass;
+def IIC_SprMFPMR     : InstrItinClass;
+def IIC_SprMTPMR     : InstrItinClass;
 
 //===----------------------------------------------------------------------===//
 // Processor instruction itineraries.
@@ -128,6 +132,8 @@ include "PPCScheduleG4Plus.td"
 include "PPCScheduleG5.td"
 include "PPCScheduleP7.td"
 include "PPCScheduleP8.td"
+include "PPCScheduleP9.td"
 include "PPCScheduleA2.td"
+include "PPCScheduleE500.td"
 include "PPCScheduleE500mc.td"
 include "PPCScheduleE5500.td"

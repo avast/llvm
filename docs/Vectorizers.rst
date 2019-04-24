@@ -44,12 +44,12 @@ Users can control the vectorization SIMD width using the command line flag "-for
   $ clang  -mllvm -force-vector-width=8 ...
   $ opt -loop-vectorize -force-vector-width=8 ...
 
-Users can control the unroll factor using the command line flag "-force-vector-unroll"
+Users can control the unroll factor using the command line flag "-force-vector-interleave"
 
 .. code-block:: console
 
-  $ clang  -mllvm -force-vector-unroll=2 ...
-  $ opt -loop-vectorize -force-vector-unroll=2 ...
+  $ clang  -mllvm -force-vector-interleave=2 ...
+  $ opt -loop-vectorize -force-vector-interleave=2 ...
 
 Pragma loop hint directives
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -99,7 +99,9 @@ Optimization remarks are enabled using:
 indicates if vectorization was specified.
 
 ``-Rpass-analysis=loop-vectorize`` identifies the statements that caused
-vectorization to fail.
+vectorization to fail. If in addition ``-fsave-optimization-record`` is
+provided, multiple causes of vectorization failure may be listed (this behavior
+might change in the future).
 
 Consider the following loop:
 
@@ -309,7 +311,7 @@ ignored (as other compilers do) are still being left un-vectorized.
 Vectorization of function calls
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Loop Vectorize can vectorize intrinsic math functions.
+The Loop Vectorizer can vectorize intrinsic math functions.
 See the table below for a list of these functions.
 
 +-----+-----+---------+
@@ -325,6 +327,11 @@ See the table below for a list of these functions.
 +-----+-----+---------+
 |     |     | fmuladd |
 +-----+-----+---------+
+
+Note that the optimizer may not be able to vectorize math library functions 
+that correspond to these intrinsics if the library calls access external state 
+such as "errno". To allow better optimization of C/C++ math library functions, 
+use "-fno-math-errno".
 
 The loop vectorizer knows about special instructions on the target and will
 vectorize a loop containing a function call that maps to the instructions. For
@@ -367,7 +374,7 @@ Performance
 -----------
 
 This section shows the execution time of Clang on a simple benchmark:
-`gcc-loops <http://llvm.org/viewvc/llvm-project/test-suite/trunk/SingleSource/UnitTests/Vectorizer/>`_.
+`gcc-loops <https://github.com/llvm/llvm-test-suite/tree/master/SingleSource/UnitTests/Vectorizer>`_.
 This benchmarks is a collection of loops from the GCC autovectorization
 `page <http://gcc.gnu.org/projects/tree-ssa/vectorization.html>`_ by Dorit Nuzman.
 
@@ -379,6 +386,17 @@ The Y-axis shows the time in msec. Lower is better. The last column shows the ge
 And Linpack-pc with the same configuration. Result is Mflops, higher is better.
 
 .. image:: linpack-pc.png
+
+Ongoing Development Directions
+------------------------------
+
+.. toctree::
+   :hidden:
+
+   Proposals/VectorizationPlan
+
+:doc:`Proposals/VectorizationPlan`
+   Modeling the process and upgrading the infrastructure of LLVM's Loop Vectorizer.
 
 .. _slp-vectorizer:
 
@@ -415,12 +433,3 @@ through clang using the command line flag:
 .. code-block:: console
 
    $ clang -fno-slp-vectorize file.c
-
-LLVM has a second basic block vectorization phase
-which is more compile-time intensive (The BB vectorizer). This optimization
-can be enabled through clang using the command line flag:
-
-.. code-block:: console
-
-   $ clang -fslp-vectorize-aggressive file.c
-

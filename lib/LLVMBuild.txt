@@ -22,23 +22,32 @@ subdirectories =
  Bitcode
  CodeGen
 ; DebugInfo
+ Demangle
 ; ExecutionEngine
-; LibDriver
+; FuzzMutate
 ; LineEditor
 ; Linker
  IR
  IRReader
 ; LTO
  MC
+; MCA
  Object
+ BinaryFormat
 ; ObjectYAML
 ; Option
+; OptRemarks
  Passes
 ; ProfileData
  Support
  TableGen
+; TextAPI
  Target
+; Testing
+; ToolDrivers
  Transforms
+; WindowsManifest
+; XRay
 
 [component_0]
 type = Group

@@ -26,6 +26,14 @@ subdirectories =
 type = Library
 name = CodeGen
 parent = Libraries
-required_libraries = Analysis BitReader BitWriter Core MC Scalar Support Target TransformUtils
+required_libraries =
+ Analysis
+ BitReader
+ BitWriter
+ Core
+ MC
 ; ProfileData
-; Instrumentation
+ Scalar
+ Support
+ Target
+ TransformUtils

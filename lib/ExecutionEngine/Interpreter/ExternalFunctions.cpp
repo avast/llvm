@@ -20,20 +20,31 @@
 //===----------------------------------------------------------------------===//
 
 #include "Interpreter.h"
-#include "llvm/Config/config.h"     // Detect libffi
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/Config/config.h" // Detect libffi
+#include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Module.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/UniqueLock.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cassert>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <string>
+#include <utility>
+#include <vector>
 
 #ifdef HAVE_FFI_CALL
 #ifdef HAVE_FFI_H
@@ -92,8 +103,9 @@ static ExFunc lookupFunction(const Function *F) {
   // composite function name should be.
   std::string ExtName = "lle_";
   FunctionType *FT = F->getFunctionType();
-  for (unsigned i = 0, e = FT->getNumContainedTypes(); i != e; ++i)
-    ExtName += getTypeID(FT->getContainedType(i));
+  ExtName += getTypeID(FT->getReturnType());
+  for (Type *T : FT->params())
+    ExtName += getTypeID(T);
   ExtName += ("_" + F->getName()).str();
 
   sys::ScopedLock Writer(*FunctionsLock);
@@ -216,7 +228,8 @@ static bool ffiInvoke(RawFunc Fn, Function *F, ArrayRef<GenericValue> ArgVals,
   Type *RetTy = FTy->getReturnType();
   ffi_type *rtype = ffiTypeFor(RetTy);
 
-  if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, NumArgs, rtype, &args[0]) == FFI_OK) {
+  if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, NumArgs, rtype, args.data()) ==
+      FFI_OK) {
     SmallVector<uint8_t, 128> ret;
     if (RetTy->getTypeID() != Type::VoidTyID)
       ret.resize(TD.getTypeStoreSize(RetTy));
@@ -290,7 +303,6 @@ GenericValue Interpreter::callExternalFunction(Function *F,
   return GenericValue();
 }
 
-
 //===----------------------------------------------------------------------===//
 //  Functions "exported" to the running application...
 //
@@ -331,7 +343,7 @@ static GenericValue lle_X_sprintf(FunctionType *FT,
   // close enough for now.
   GenericValue GV;
   GV.IntVal = APInt(32, strlen(FmtStr));
-  while (1) {
+  while (true) {
     switch (*FmtStr) {
     case 0: return GV;             // Null terminator...
     default:                       // Normal nonspecial character

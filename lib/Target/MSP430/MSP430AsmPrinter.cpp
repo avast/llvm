@@ -12,11 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MSP430.h"
 #include "InstPrinter/MSP430InstPrinter.h"
+#include "MSP430.h"
 #include "MSP430InstrInfo.h"
 #include "MSP430MCInstLower.h"
 #include "MSP430TargetMachine.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -28,6 +29,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -42,9 +44,9 @@ namespace {
     MSP430AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
         : AsmPrinter(TM, std::move(Streamer)) {}
 
-    const char *getPassName() const override {
-      return "MSP430 Assembly Printer";
-    }
+    StringRef getPassName() const override { return "MSP430 Assembly Printer"; }
+
+    bool runOnMachineFunction(MachineFunction &MF) override;
 
     void printOperand(const MachineInstr *MI, int OpNum,
                       raw_ostream &O, const char* Modifier = nullptr);
@@ -57,6 +59,8 @@ namespace {
                                unsigned OpNo, unsigned AsmVariant,
                                const char *ExtraCode, raw_ostream &O) override;
     void EmitInstruction(const MachineInstr *MI) override;
+
+    void EmitInterruptVectorSection(MachineFunction &ISR);
   };
 } // end of anonymous namespace
 
@@ -155,7 +159,33 @@ void MSP430AsmPrinter::EmitInstruction(const MachineInstr *MI) {
   EmitToStreamer(*OutStreamer, TmpInst);
 }
 
+void MSP430AsmPrinter::EmitInterruptVectorSection(MachineFunction &ISR) {
+  MCSection *Cur = OutStreamer->getCurrentSectionOnly();
+  const auto *F = &ISR.getFunction();
+  assert(F->hasFnAttribute("interrupt") &&
+         "Functions with MSP430_INTR CC should have 'interrupt' attribute");
+  StringRef IVIdx = F->getFnAttribute("interrupt").getValueAsString();
+  MCSection *IV = OutStreamer->getContext().getELFSection(
+    "__interrupt_vector_" + IVIdx,
+    ELF::SHT_PROGBITS, ELF::SHF_ALLOC | ELF::SHF_EXECINSTR);
+  OutStreamer->SwitchSection(IV);
+
+  const MCSymbol *FunctionSymbol = getSymbol(F);
+  OutStreamer->EmitSymbolValue(FunctionSymbol, TM.getProgramPointerSize());
+  OutStreamer->SwitchSection(Cur);
+}
+
+bool MSP430AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
+  // Emit separate section for an interrupt vector if ISR
+  if (MF.getFunction().getCallingConv() == CallingConv::MSP430_INTR)
+    EmitInterruptVectorSection(MF);
+
+  SetupMachineFunction(MF);
+  EmitFunctionBody();
+  return false;
+}
+
 // Force static initialization.
 extern "C" void LLVMInitializeMSP430AsmPrinter() {
-  RegisterAsmPrinter<MSP430AsmPrinter> X(TheMSP430Target);
+  RegisterAsmPrinter<MSP430AsmPrinter> X(getTheMSP430Target());
 }
