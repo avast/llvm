@@ -92,7 +92,6 @@ add_llvm_library(LLVMSupport
   InitLLVM.cpp
   IntEqClasses.cpp
   IntervalMap.cpp
-  ItaniumManglingCanonicalizer.cpp
   JamCRC.cpp
   JSON.cpp
   KnownBits.cpp
@@ -125,7 +124,6 @@ add_llvm_library(LLVMSupport
   StringPool.cpp
   StringSaver.cpp
   StringRef.cpp
-  SymbolRemappingReader.cpp
   SystemUtils.cpp
   TarWriter.cpp
   TargetParser.cpp

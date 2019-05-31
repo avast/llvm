@@ -1,3 +1,6 @@
+// RetDec: This file was taken from LLVM commit: 438784aaf3397778212bd41bf5333f86e04b4814.
+//
+
 //===--- Compiler.h ---------------------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure

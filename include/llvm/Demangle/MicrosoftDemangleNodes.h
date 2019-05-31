@@ -1,11 +1,33 @@
+// RetDec: This file was taken from LLVM commit: 438784aaf3397778212bd41bf5333f86e04b4814.
+//
+
+//===- MicrosoftDemangleNodes.h ---------------------------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the AST nodes used in the MSVC demangler.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef LLVM_SUPPORT_MICROSOFTDEMANGLENODES_H
 #define LLVM_SUPPORT_MICROSOFTDEMANGLENODES_H
 
-#include "llvm/Demangle/Compiler.h"
+#include "llvm/Demangle/DemangleConfig.h"
 #include "llvm/Demangle/StringView.h"
 #include <array>
 
+namespace llvm {
+namespace itanium_demangle {
 class OutputStream;
+}
+}
+
+using llvm::itanium_demangle::OutputStream;
+using llvm::itanium_demangle::StringView;
 
 namespace llvm {
 namespace ms_demangle {

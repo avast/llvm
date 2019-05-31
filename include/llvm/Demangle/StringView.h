@@ -1,21 +1,27 @@
+// RetDec: This file was taken from LLVM commit: 438784aaf3397778212bd41bf5333f86e04b4814.
+//
+
 //===--- StringView.h -------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+//===----------------------------------------------------------------------===//
 //
+// FIXME: Use std::string_view instead when we support C++17.
 //
-// This file contains a limited version of LLVM's StringView class.  It is
-// copied here so that LLVMDemangle need not take a dependency on LLVMSupport.
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DEMANGLE_STRINGVIEW_H
-#define LLVM_DEMANGLE_STRINGVIEW_H
+#ifndef DEMANGLE_STRINGVIEW_H
+#define DEMANGLE_STRINGVIEW_H
 
+#include "DemangleConfig.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+
+DEMANGLE_NAMESPACE_BEGIN
 
 class StringView {
   const char *First;
@@ -43,10 +49,32 @@ public:
     if (FindBegin < size()) {
       // Just forward to memchr, which is faster than a hand-rolled loop.
       if (const void *P = ::memchr(First + FindBegin, C, size() - FindBegin))
-        return static_cast<const char *>(P) - First;
+        return size_t(static_cast<const char *>(P) - First);
     }
     return npos;
   }
+
+  // RetDec{
+  StringView substrUntil(char c) const {
+    auto pos = find(c);
+    return dropBack(size() - pos);
+  }
+
+  StringView cutUntil(char c) { 	// TODO ked tam neni/ked bude prazdny
+    auto cut = substrUntil(c);
+    consumeFront(cut);
+    return cut;
+  }
+
+  StringView drop(size_t len) {
+    if (len > size()) {
+      len = size();
+    }
+    auto dropped = StringView(First, First+len);
+    First += len;
+    return dropped;
+  }
+  // }RetDec
 
   StringView substr(size_t From, size_t To) const {
     if (To >= size())
@@ -117,5 +145,7 @@ inline bool operator==(const StringView &LHS, const StringView &RHS) {
   return LHS.size() == RHS.size() &&
          std::equal(LHS.begin(), LHS.end(), RHS.begin());
 }
+
+DEMANGLE_NAMESPACE_END
 
 #endif

@@ -1,23 +1,29 @@
+// RetDec: This file was taken from LLVM commit: 438784aaf3397778212bd41bf5333f86e04b4814.
+//
+
 //===------------------------- ItaniumDemangle.h ----------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-// This file is dual licensed under the MIT and the University of Illinois Open
-// Source Licenses. See LICENSE.TXT for details.
+//===----------------------------------------------------------------------===//
+//
+// Generic itanium demangler library. This file has two byte-per-byte identical
+// copies in the source tree, one in libcxxabi, and the other in llvm.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_DEMANGLE_ITANIUMDEMANGLE_H
-#define LLVM_DEMANGLE_ITANIUMDEMANGLE_H
+#ifndef DEMANGLE_ITANIUMDEMANGLE_H
+#define DEMANGLE_ITANIUMDEMANGLE_H
 
 // FIXME: (possibly) incomplete list of features that clang mangles that this
 // file does not yet support:
 //   - C++ modules TS
 
-#include "llvm/Demangle/Compiler.h"
-#include "llvm/Demangle/StringView.h"
-#include "llvm/Demangle/Utility.h"
-
+#include "DemangleConfig.h"
+#include "StringView.h"
+#include "Utility.h"
 #include <cassert>
 #include <cctype>
 #include <cstdio>
@@ -95,8 +101,8 @@
     X(BracedExpr) \
     X(BracedRangeExpr)
 
-namespace llvm {
-namespace itanium_demangle {
+DEMANGLE_NAMESPACE_BEGIN
+
 // Base class of all AST nodes. The AST is built by the parser, then is
 // traversed by the printLeft/Right functions to produce a demangled string.
 class Node {
@@ -194,7 +200,7 @@ public:
   virtual ~Node() = default;
 
 #ifndef NDEBUG
-  LLVM_DUMP_METHOD void dump() const;
+  DEMANGLE_DUMP_METHOD void dump() const;
 #endif
 };
 
@@ -337,6 +343,10 @@ public:
   }
 
   void printRight(OutputStream &S) const override { Child->printRight(S); }
+
+  // RetDec {
+  const Node *getChild() const { return Child; }
+  // } RetDec
 };
 
 class ConversionOperatorType final : public Node {
@@ -499,6 +509,10 @@ public:
       Pointee->printRight(s);
     }
   }
+
+  // RetDec {
+  const Node *getPointee() const  { return Pointee; }
+  // } RetDec
 };
 
 enum class ReferenceKind {
@@ -562,6 +576,11 @@ public:
       s += ")";
     Collapsed.second->printRight(s);
   }
+
+  // RetDec {
+  const Node *getPointee() const { return Pointee; }
+  ReferenceKind getReferenceKind() const { return RK; }
+  // } RetDec
 };
 
 class PointerToMemberType final : public Node {
@@ -661,6 +680,12 @@ public:
     S += "]";
     Base->printRight(S);
   }
+
+  // RetDec {
+  const Node *getBase() const { return Base; }
+
+  const NodeOrString *getDimension() const { return &Dimension;}
+  // } RetDec
 };
 
 class FunctionType final : public Node {
@@ -721,6 +746,11 @@ public:
       ExceptionSpec->print(S);
     }
   }
+
+  // RetDec {
+  const Node *getReturnType() const { return Ret; }
+  NodeArray getParameters() const { return Params; }
+  // } RetDec
 };
 
 class NoexceptSpec : public Node {
@@ -1278,7 +1308,7 @@ public:
     case SpecialSubKind::iostream:
       return StringView("basic_iostream");
     }
-    LLVM_BUILTIN_UNREACHABLE;
+    DEMANGLE_UNREACHABLE;
   }
 
   void printLeft(OutputStream &S) const override {
@@ -1330,7 +1360,7 @@ public:
     case SpecialSubKind::iostream:
       return StringView("iostream");
     }
-    LLVM_BUILTIN_UNREACHABLE;
+    DEMANGLE_UNREACHABLE;
   }
 
   void printLeft(OutputStream &S) const override {
@@ -2161,10 +2191,33 @@ template <typename Derived, typename Alloc> struct AbstractManglingParser {
   bool PermitForwardTemplateReferences = false;
   bool ParsingLambdaParams = false;
 
-  Alloc ASTAllocator;
+  // RetDec {
+  // reference to allocator used
+  Alloc &ASTAllocator;
+
+  // if no allocator is given as parameter, this alloc is used
+  // used for compatibility with non-modified library
+  Alloc WorkaroundAllocator;
+
+  /*
+   * Function used for copiing strings into allocator.
+   * StringView stores only pointers to start and end of string.
+   * So to make sure the strings are not dealocated between demangling and reading,
+   * we store those strings that are in risk in allocator alongside nodes.
+   */
+  StringView copyString(const StringView &Borrowed) {
+    char *Stable = static_cast<char *>(ASTAllocator.allocateBytes(Borrowed.size() + 1));
+    std::strcpy(Stable, Borrowed.begin());
+
+    return {Stable, Borrowed.size()};
+  }
+
+  AbstractManglingParser(const char *First_, const char *Last_, Alloc &allocator)
+      : First(First_), Last(Last_), ASTAllocator(allocator) {}
 
   AbstractManglingParser(const char *First_, const char *Last_)
-      : First(First_), Last(Last_) {}
+	  : First(First_), Last(Last_), ASTAllocator(WorkaroundAllocator) {}
+  // } RetDec
 
   Derived &getDerived() { return static_cast<Derived &>(*this); }
 
@@ -2476,6 +2529,12 @@ AbstractManglingParser<Derived, Alloc>::parseUnnamedTypeName(NameState *) {
       return nullptr;
     return make<ClosureTypeName>(Params, Count);
   }
+  if (consumeIf("Ub")) {
+    (void)parseNumber();
+    if (!consumeIf('_'))
+      return nullptr;
+    return make<NameType>("'block-literal'");
+  }
   return nullptr;
 }
 
@@ -2487,7 +2546,9 @@ Node *AbstractManglingParser<Derived, Alloc>::parseSourceName(NameState *) {
     return nullptr;
   if (numLeft() < Length || Length == 0)
     return nullptr;
-  StringView Name(First, First + Length);
+  // RetDec {
+  StringView Name = copyString({First, First + Length});
+  // } RetDec
   First += Length;
   if (Name.startsWith("_GLOBAL__N"))
     return make<NameType>("(anonymous namespace)");
@@ -3163,7 +3224,9 @@ AbstractManglingParser<Alloc, Derived>::parseNumber(bool AllowNegative) {
     return StringView();
   while (numLeft() != 0 && std::isdigit(*First))
     ++First;
-  return StringView(Tmp, First);
+  // RetDec {
+  return copyString(StringView(Tmp, First));
+  // } RetDec
 }
 
 // <positive length number> ::= [0-9]*
@@ -3184,7 +3247,9 @@ StringView AbstractManglingParser<Alloc, Derived>::parseBareSourceName() {
   size_t Int = 0;
   if (parsePositiveInteger(&Int) || numLeft() < Int)
     return StringView();
-  StringView R(First, First + Int);
+  // RetDec {
+  StringView R = copyString({First, First + Int});
+  // } RetDec
   First += Int;
   return R;
 }
@@ -3396,7 +3461,9 @@ Node *AbstractManglingParser<Derived, Alloc>::parseQualifiedType() {
 
     // extension            ::= U <objc-name> <objc-type>  # objc-type<identifier>
     if (Qual.startsWith("objcproto")) {
-      StringView ProtoSourceName = Qual.dropFront(std::strlen("objcproto"));
+      // RetDec {
+      StringView ProtoSourceName = copyString(Qual.dropFront(std::strlen("objcproto")));
+      // } RetDec
       StringView Proto;
       {
         SwapAndRestore<const char *> SaveFirst(First, ProtoSourceName.begin()),
@@ -3467,7 +3534,7 @@ Node *AbstractManglingParser<Derived, Alloc>::parseType() {
       Result = getDerived().parseFunctionType();
       break;
     }
-    LLVM_FALLTHROUGH;
+    DEMANGLE_FALLTHROUGH;
   }
   case 'U': {
     Result = getDerived().parseQualifiedType();
@@ -3754,7 +3821,7 @@ Node *AbstractManglingParser<Derived, Alloc>::parseType() {
       // substitution table.
       return Sub;
     }
-    LLVM_FALLTHROUGH;
+    DEMANGLE_FALLTHROUGH;
   }
   //        ::= <class-enum-type>
   default: {
@@ -4901,7 +4968,9 @@ Node *AbstractManglingParser<Alloc, Derived>::parseFloatingLiteral() {
   const size_t N = FloatData<Float>::mangled_size;
   if (numLeft() <= N)
     return nullptr;
-  StringView Data(First, First + N);
+  // RetDec {
+  StringView Data = copyString({First, First + N});
+  // } RetDec
   for (char C : Data)
     if (!std::isxdigit(C))
       return nullptr;
@@ -5139,12 +5208,14 @@ AbstractManglingParser<Derived, Alloc>::parseTemplateArgs(bool TagTemplates) {
 // extension      ::= ___Z <encoding> _block_invoke_<decimal-digit>+
 template <typename Derived, typename Alloc>
 Node *AbstractManglingParser<Derived, Alloc>::parse() {
-  if (consumeIf("_Z")) {
+  if (consumeIf("_Z") || consumeIf("__Z")) {
     Node *Encoding = getDerived().parseEncoding();
     if (Encoding == nullptr)
       return nullptr;
     if (look() == '.') {
-      Encoding = make<DotSuffix>(Encoding, StringView(First, Last));
+      // RetDec {
+      Encoding = make<DotSuffix>(Encoding, copyString({First, Last}));
+      // } RetDec
       First = Last;
     }
     if (numLeft() != 0)
@@ -5152,7 +5223,7 @@ Node *AbstractManglingParser<Derived, Alloc>::parse() {
     return Encoding;
   }
 
-  if (consumeIf("___Z")) {
+  if (consumeIf("___Z") || consumeIf("____Z")) {
     Node *Encoding = getDerived().parseEncoding();
     if (Encoding == nullptr || !consumeIf("_block_invoke"))
       return nullptr;
@@ -5178,7 +5249,6 @@ struct ManglingParser : AbstractManglingParser<ManglingParser<Alloc>, Alloc> {
                                Alloc>::AbstractManglingParser;
 };
 
-}  // namespace itanium_demangle
-}  // namespace llvm
+DEMANGLE_NAMESPACE_END
 
-#endif // LLVM_DEMANGLE_ITANIUMDEMANGLE_H
+#endif // DEMANGLE_ITANIUMDEMANGLE_H
