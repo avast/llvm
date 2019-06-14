@@ -26,7 +26,9 @@ private:
 		size_t Current;
 	};
 
-	static constexpr size_t AllocSize = 4096;
+// RetDec: insrease alloc size to prevent segfaults.
+//	static constexpr size_t AllocSize = 4096; // RetDec: old code
+	static constexpr size_t AllocSize = 4096 * 4; // RetDec: new code
 	static constexpr size_t UsableAllocSize = AllocSize - sizeof(BlockMeta);
 
 	alignas(long double) char InitialBuffer[AllocSize];
