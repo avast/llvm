@@ -229,6 +229,8 @@ static void parseHeader(const MachOObjectFile &Obj, T &Header,
     Header = *HeaderOrErr;
   else
     Err = HeaderOrErr.takeError();
+
+  consumeError(std::move(Err)); // RetDec new code.
 }
 
 // This is used to check for overlapping of Mach-O elements.
@@ -3112,6 +3114,8 @@ MachOObjectFile::exports(Error &E, ArrayRef<uint8_t> Trie,
   ExportEntry Finish(&E, O, Trie);
   Finish.moveToEnd();
 
+  consumeError(std::move(E)); // RetDec new code.
+
   return make_range(export_iterator(Start), export_iterator(Finish));
 }
 
@@ -4180,6 +4184,8 @@ MachOObjectFile::bindTable(Error &Err, MachOObjectFile *O,
 
   MachOBindEntry Finish(&Err, O, Opcodes, is64, BKind);
   Finish.moveToEnd();
+
+  consumeError(std::move(Err)); // RetDec new code.
 
   return make_range(bind_iterator(Start), bind_iterator(Finish));
 }
