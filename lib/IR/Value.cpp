@@ -289,6 +289,18 @@ void Value::setName(const Twine &NewName) {
 }
 
 void Value::takeName(Value *V) {
+
+// RetDec - new code start.
+// Propagate instruction address information together with instruciton name.
+if (isa<Instruction>(V) && isa<Instruction>(this)) {
+  Instruction* src = cast<Instruction>(V);
+  Instruction* dst = cast<Instruction>(this);
+  if (MDNode* mdn = src->getMetadata("insn.addr")) {
+    dst->setMetadata("insn.addr", mdn);
+  }
+}
+// RetDec - new code end.
+
   ValueSymbolTable *ST = nullptr;
   // If this value has a name, drop it.
   if (hasName()) {
