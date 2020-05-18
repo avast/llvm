@@ -19,6 +19,12 @@
 #include "llvm/Demangle/DemangleConfig.h"
 #include "llvm/Demangle/StringView.h"
 #include <array>
+// retdec {
+// fix gcc 10 compilation: https://bugs.gentoo.org/708730
+// this should be fixed in LLVM master, so no need to migrate this
+#include <cstdint>
+#include <string>
+// retdec }
 
 namespace llvm {
 namespace itanium_demangle {
