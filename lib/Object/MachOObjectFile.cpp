@@ -1715,7 +1715,7 @@ MachOObjectFile::MachOObjectFile(MemoryBufferRef Object, bool IsLittleEndian,
     consumeError(std::move(Err)); // RetDec new code.
     // return; // RetDec original code.
   }
-  assert(LoadCommands.size() == LoadCommandCount);
+  //assert(LoadCommands.size() == LoadCommandCount); // RetDec original code.
 
   Err = Error::success();
 }
